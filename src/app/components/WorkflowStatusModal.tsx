@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, CheckCircle2, AlertTriangle, Clock, Send, Shield, Sparkles, ChevronRight, Mail, MessageSquare, Bell, Search, BarChart2, Gift, UserCheck, UserX, Zap, Radio } from 'lucide-react';
+import { X, CheckCircle2, AlertTriangle, Clock, Send, Shield, Sparkles, ChevronRight, ChevronDown, Mail, MessageSquare, Bell, Search, BarChart2, Gift, UserCheck, UserX, Zap, Radio, Brain } from 'lucide-react';
 import { useWorkflowStatus, useApproval } from '../hooks/useWorkflow';
 import type { WorkflowRun } from '../services/api';
 
@@ -283,6 +283,331 @@ function humaniseAudit(agent: string, action: string): AuditMeta {
   return { label: readable, detail: `${agent} completed this step.`, icon: <Zap size={14} />, color: 'text-gray-3 bg-gray-1' };
 }
 
+// ── Agent Accordion ───────────────────────────────────────────────────────────
+
+interface AgentStepDef {
+  stepKey: string;
+  agent: string;
+  icon: React.ElementType;
+  color: string;
+  description: string;
+  tasks: string[];
+}
+
+const AGENT_STEPS_DEF: AgentStepDef[] = [
+  {
+    stepKey: 'init',
+    agent: 'Retention Orchestrator',
+    icon: Brain,
+    color: 'text-ai-purple bg-ai-purple-light',
+    description: 'Receives the trigger event, validates the customer record, and routes the job to the signal analysis pipeline.',
+    tasks: [
+      'Received session_collapse trigger event',
+      'Validated customer record exists',
+      'Loaded customer profile & history',
+      'Dispatched to Signal Intelligence Agent',
+    ],
+  },
+  {
+    stepKey: 'signal_aggregation',
+    agent: 'Signal Intelligence Agent',
+    icon: Zap,
+    color: 'text-high bg-high-light',
+    description: 'Scans all behavioural data sources in parallel — purchase history, web sessions, email engagement, and loyalty activity.',
+    tasks: [
+      'Fanned out across all data sources',
+      'Scanned purchase history (6 months)',
+      'Analysed web session data',
+      'Checked email engagement metrics',
+      'Reviewed loyalty redemption activity',
+      'Aggregated signals & resolved conflicts',
+    ],
+  },
+  {
+    stepKey: 'scoring',
+    agent: 'Retention Orchestrator',
+    icon: BarChart2,
+    color: 'text-ai-purple bg-ai-purple-light',
+    description: 'Combines all signal inputs into a composite churn risk score and determines risk level and intervention type.',
+    tasks: [
+      'Combined all signal inputs',
+      'Computed composite churn score',
+      'Assigned risk level (HIGH / MEDIUM / LOW)',
+      'Determined intervention type',
+    ],
+  },
+  {
+    stepKey: 'offer_personalisation',
+    agent: 'Offer Personalisation Agent',
+    icon: Gift,
+    color: 'text-teal bg-teal-light',
+    description: 'Reviews loyalty tier, purchase history, and margin constraints to select the optimal retention offer.',
+    tasks: [
+      'Retrieved active offer catalogue',
+      'Reviewed customer loyalty tier',
+      'Checked margin protection constraints',
+      'Ranked offer candidates by predicted uplift',
+      'Selected optimal offer',
+      'Verified offer eligibility',
+    ],
+  },
+  {
+    stepKey: 'human_approval',
+    agent: 'Approval Gateway',
+    icon: UserCheck,
+    color: 'text-medium bg-amber-50',
+    description: 'Pauses the workflow for manager review. HIGH-risk customers require a human decision before the campaign is sent.',
+    tasks: [
+      'Triggered approval request',
+      'Notified retention manager',
+      'Holding workflow — awaiting decision',
+    ],
+  },
+  {
+    stepKey: 'outreach_execution',
+    agent: 'Outreach Execution Agent',
+    icon: Send,
+    color: 'text-teal bg-teal-light',
+    description: 'Generates personalised campaign copy for each channel and dispatches the retention campaign.',
+    tasks: [
+      'Generated personalised email copy',
+      'Drafted SMS message',
+      'Prepared push notification',
+      'Applied personalisation tokens',
+      'Selected optimal send timing',
+      'Dispatched campaign across all channels',
+    ],
+  },
+];
+
+type StepStatus = 'completed' | 'in_progress' | 'needs_approval' | 'pending';
+
+function getStepStatus(stepKey: string, run: WorkflowRun): StepStatus {
+  if (run.workflow_status === 'completed') return 'completed';
+  if (stepKey === 'human_approval' && run.awaiting_human) return 'needs_approval';
+  const currentIdx = STEPS.indexOf(run.current_step);
+  const stepIdx = STEPS.indexOf(stepKey);
+  if (stepIdx < currentIdx) return 'completed';
+  if (stepIdx === currentIdx) return 'in_progress';
+  return 'pending';
+}
+
+// Count audit entries relevant to a given step to estimate task progress
+function auditCountForStep(stepKey: string, run: WorkflowRun): number {
+  const trail = run.audit_trail ?? [];
+  const matchers: Record<string, string[]> = {
+    init: ['workflow_initiated', 'workflow initiated', 'dispatch.*signal', 'dispatch.*signalaggreation'],
+    signal_aggregation: ['fan_out', 'parallel_utility', 'signal'],
+    scoring: ['composite_score', 'score_computed', 'score computed'],
+    offer_personalisation: ['dispatch.*offer', 'offer_selected', 'offer selected', 'offer'],
+    human_approval: ['awaiting_human', 'human_approval', 'approval'],
+    outreach_execution: ['outreach', 'content_generated', 'outreach_sent', 'sent'],
+  };
+  const patterns = matchers[stepKey] ?? [];
+  return trail.filter(e =>
+    patterns.some(p => new RegExp(p, 'i').test(e.action))
+  ).length;
+}
+
+function AgentStatusChip({ status }: { status: StepStatus }) {
+  const cfg = {
+    completed:      { label: 'Completed',       cls: 'bg-low-light text-low' },
+    in_progress:    { label: 'In Progress',     cls: 'bg-teal-light text-teal' },
+    needs_approval: { label: 'Needs Approval',  cls: 'bg-amber-50 text-amber-600 border border-amber-200' },
+    pending:        { label: 'Pending',          cls: 'bg-gray-1 text-gray-3' },
+  }[status];
+  return (
+    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full flex-shrink-0 ${cfg.cls}`} style={{ fontSize: '11px', fontWeight: '600' }}>
+      {status === 'in_progress' && <span className="w-1.5 h-1.5 rounded-full bg-teal animate-ping inline-block" />}
+      {status === 'needs_approval' && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse inline-block" />}
+      {cfg.label}
+    </span>
+  );
+}
+
+function AgentAccordion({ run }: { run: WorkflowRun }) {
+  // Auto-open the in_progress / needs_approval step
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() => {
+    const currentStatus = getStepStatus(run.current_step, run);
+    if (currentStatus === 'needs_approval') return new Set(['human_approval']);
+    return new Set([run.current_step]);
+  });
+
+  const toggle = (key: string) => setOpenKeys(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  const visibleSteps = AGENT_STEPS_DEF.filter(s =>
+    s.stepKey !== 'human_approval' || run.risk_level === 'HIGH' || run.awaiting_human
+  );
+
+  return (
+    <div className="mb-6">
+      <div className="text-xs text-gray-3 font-semibold uppercase tracking-wider mb-3">Agent Workflow</div>
+      <div className="space-y-2">
+        {visibleSteps.map((stepDef) => {
+          const status = getStepStatus(stepDef.stepKey, run);
+          const isOpen = openKeys.has(stepDef.stepKey);
+          const Icon = stepDef.icon;
+          const auditCount = auditCountForStep(stepDef.stepKey, run);
+
+          // Determine how many tasks to show as "done" within this step
+          const totalTasks = stepDef.tasks.length;
+          let doneTasks = 0;
+          if (status === 'completed') doneTasks = totalTasks;
+          else if (status === 'in_progress') doneTasks = Math.min(Math.max(auditCount - 1, 0), totalTasks - 1);
+          else if (status === 'needs_approval') doneTasks = 2; // first two tasks done, third is waiting
+
+          return (
+            <div key={stepDef.stepKey} className={`border rounded-lg overflow-hidden ${
+              status === 'in_progress' ? 'border-teal' :
+              status === 'needs_approval' ? 'border-amber-300' :
+              status === 'completed' ? 'border-low/40' :
+              'border-gray-2'
+            }`}>
+              {/* Accordion header */}
+              <button
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                  status === 'in_progress' ? 'bg-teal-light/40 hover:bg-teal-light/60' :
+                  status === 'needs_approval' ? 'bg-amber-50 hover:bg-amber-100/60' :
+                  status === 'completed' ? 'bg-white hover:bg-gray-1' :
+                  'bg-gray-1/50 hover:bg-gray-1'
+                }`}
+                onClick={() => toggle(stepDef.stepKey)}
+              >
+                {/* Icon */}
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${stepDef.color}`}>
+                  <Icon size={14} />
+                </div>
+
+                {/* Agent name */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-navy font-semibold truncate" style={{ fontSize: '13px' }}>
+                    {stepDef.agent}
+                  </div>
+                  {!isOpen && status !== 'pending' && (
+                    <div className="text-gray-3 truncate" style={{ fontSize: '11px' }}>
+                      {status === 'completed'
+                        ? `${totalTasks} tasks completed`
+                        : status === 'needs_approval'
+                        ? 'Waiting for manager decision'
+                        : `${doneTasks} / ${totalTasks} tasks done`}
+                    </div>
+                  )}
+                </div>
+
+                {/* Status chip */}
+                <AgentStatusChip status={status} />
+
+                {/* Chevron */}
+                <ChevronDown
+                  size={14}
+                  className={`text-gray-3 transition-transform flex-shrink-0 ml-1 ${isOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {/* Accordion body */}
+              {isOpen && (
+                <div className="px-4 pb-4 pt-3 border-t border-gray-2 bg-white">
+                  {/* Description */}
+                  <p className="text-gray-3 mb-4" style={{ fontSize: '12px', lineHeight: '1.6' }}>
+                    {stepDef.description}
+                  </p>
+
+                  {/* Task checklist */}
+                  <div className="space-y-2">
+                    {stepDef.tasks.map((task, ti) => {
+                      const isDone = ti < doneTasks;
+                      const isActive = ti === doneTasks && status === 'in_progress';
+                      const isWaiting = ti === doneTasks && status === 'needs_approval';
+
+                      return (
+                        <div key={ti} className={`flex items-center gap-2.5 py-1.5 px-3 rounded-lg ${
+                          isActive ? 'bg-teal-light' :
+                          isWaiting ? 'bg-amber-50' :
+                          isDone ? 'bg-low-light/30' :
+                          'bg-gray-1'
+                        }`}>
+                          {isDone ? (
+                            <CheckCircle2 size={13} className="text-low flex-shrink-0" />
+                          ) : isActive ? (
+                            <span className="w-3 h-3 rounded-full border-2 border-teal border-t-transparent animate-spin flex-shrink-0" />
+                          ) : isWaiting ? (
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse flex-shrink-0" />
+                          ) : (
+                            <Clock size={13} className="text-gray-3 flex-shrink-0" />
+                          )}
+                          <span className={`${
+                            isDone ? 'text-navy' :
+                            isActive ? 'text-teal font-semibold' :
+                            isWaiting ? 'text-amber-700 font-semibold' :
+                            'text-gray-3'
+                          }`} style={{ fontSize: '12px' }}>
+                            {task}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Step result data (when completed) */}
+                  {status === 'completed' && stepDef.stepKey === 'scoring' && run.composite_score != null && (
+                    <div className="mt-3 flex items-center gap-3 p-3 bg-gray-1 rounded-lg">
+                      <BarChart2 size={13} className="text-high flex-shrink-0" />
+                      <span className="text-gray-3" style={{ fontSize: '11px' }}>Result:</span>
+                      <span className="text-navy font-bold font-mono" style={{ fontSize: '13px' }}>{run.composite_score}</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        run.risk_level === 'HIGH' ? 'bg-critical-light text-critical' :
+                        run.risk_level === 'MEDIUM' ? 'bg-high-light text-high' :
+                        'bg-low-light text-low'
+                      }`}>{run.risk_level}</span>
+                      {run.intervention_type && (
+                        <span className="px-2 py-0.5 rounded bg-teal-light text-teal text-xs font-medium capitalize">
+                          {run.intervention_type.replace(/_/g, ' ')}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {status === 'completed' && stepDef.stepKey === 'offer_personalisation' && run.offer && (
+                    <div className="mt-3 flex items-center gap-3 p-3 bg-gray-1 rounded-lg flex-wrap">
+                      <Gift size={13} className="text-teal flex-shrink-0" />
+                      <span className="text-gray-3" style={{ fontSize: '11px' }}>Selected:</span>
+                      <span className="text-navy font-semibold" style={{ fontSize: '13px' }}>{run.offer.offer_title}</span>
+                      <span className="font-mono text-xs bg-white px-2 py-0.5 rounded border border-gray-2">{run.offer.offer_code}</span>
+                      <span className="text-gray-3 text-xs">Expires in {run.offer.expiry_days}d</span>
+                    </div>
+                  )}
+                  {stepDef.stepKey === 'human_approval' && run.approval_status && run.approval_status !== 'pending' && (
+                    <div className="mt-3 flex items-center gap-2 p-3 bg-gray-1 rounded-lg">
+                      <UserCheck size={13} className={`flex-shrink-0 ${run.approval_status === 'approved' ? 'text-low' : 'text-critical'}`} />
+                      <span className="text-gray-3" style={{ fontSize: '11px' }}>Decision:</span>
+                      <span className={`font-semibold text-xs ${run.approval_status === 'approved' ? 'text-low' : 'text-critical'}`}>
+                        {run.approval_status === 'approved'
+                          ? `Approved${run.approver ? ` by ${run.approver}` : ''}`
+                          : `Rejected${run.approval_reason ? ` — ${run.approval_reason}` : ''}`}
+                      </span>
+                    </div>
+                  )}
+                  {status === 'completed' && stepDef.stepKey === 'outreach_execution' && run.outreach_content && (
+                    <div className="mt-3 flex items-center gap-3 p-3 bg-gray-1 rounded-lg flex-wrap">
+                      <Send size={13} className="text-teal flex-shrink-0" />
+                      <span className="text-gray-3" style={{ fontSize: '11px' }}>Dispatched via:</span>
+                      <span className="text-navy font-semibold text-xs">{run.outreach_content.channels_used.join(', ').toUpperCase()}</span>
+                      <span className="text-gray-3 text-xs">· {run.outreach_content.send_timing}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const cfg: Record<string, { label: string; cls: string }> = {
     running:            { label: 'Running',           cls: 'bg-teal-light text-teal' },
@@ -353,6 +678,7 @@ export function WorkflowStatusPanel({ runId, customerName, onClose }: Props) {
         ) : (
           <>
             <StepIndicator run={run} />
+            <AgentAccordion run={run} />
             <ScoreDisplay run={run} />
             <ConflictsDisplay conflicts={run.signal_conflicts ?? []} />
             <OfferDisplay run={run} />
@@ -450,6 +776,7 @@ export function WorkflowStatusContent({ runId }: { runId: string }) {
         <span className="text-gray-3 text-xs">Run {runId.slice(0, 8)}…</span>
       </div>
       <StepIndicator run={run} />
+      <AgentAccordion run={run} />
       <ScoreDisplay run={run} />
       <ConflictsDisplay conflicts={run.signal_conflicts ?? []} />
       <OfferDisplay run={run} />
