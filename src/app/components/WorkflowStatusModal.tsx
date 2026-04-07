@@ -143,7 +143,7 @@ function OutreachDisplay({ run }: { run: WorkflowRun }) {
         <Send size={14} />
         {isPreview
           ? `Campaign Preview — ${oc.channels_used.join(' + ').toUpperCase()} (pending approval)`
-          : `Campaign Sent — ${oc.channels_used.join(' + ').toUpperCase()}`}
+          : `Review Content for — ${oc.channels_used.join(' + ').toUpperCase()}`}
       </div>
 
       {oc.email && (
