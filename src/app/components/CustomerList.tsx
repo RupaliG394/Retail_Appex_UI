@@ -480,7 +480,7 @@ function CustomerRow({ customer, isSelected, onToggle, isEven, onTrigger, isTrig
               {isTriggering && (
                 <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
               )}
-              View Brief
+              View Activity
             </button>
           ) : (
             <button
@@ -492,7 +492,7 @@ function CustomerRow({ customer, isSelected, onToggle, isEven, onTrigger, isTrig
               {isTriggering && (
                 <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
               )}
-              {isTriggering ? 'Briefing…' : 'Brief'}
+              {isTriggering ? 'Processing…' : 'Take Action'}
             </button>
           )}
         </div>
