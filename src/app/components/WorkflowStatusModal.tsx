@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, CheckCircle2, AlertTriangle, Clock, Send, Shield, Sparkles, ChevronRight, Mail, MessageSquare, Bell } from 'lucide-react';
+import { X, CheckCircle2, AlertTriangle, Clock, Send, Shield, Sparkles, ChevronRight, Mail, MessageSquare, Bell, Search, BarChart2, Gift, UserCheck, UserX, Zap, Radio } from 'lucide-react';
 import { useWorkflowStatus, useApproval } from '../hooks/useWorkflow';
 import type { WorkflowRun } from '../services/api';
 
@@ -228,6 +228,61 @@ function ApprovalForm({ run, onApprove }: { run: WorkflowRun; onApprove: (approv
   );
 }
 
+type AuditMeta = { label: string; detail: string; icon: React.ReactNode; color: string };
+
+function humaniseAudit(agent: string, action: string): AuditMeta {
+  const a = action.toLowerCase();
+
+  if (a.includes('workflow_initiated') || a.includes('workflow initiated'))
+    return { label: 'Workflow kicked off', detail: 'The retention orchestrator started a new workflow run for this customer.', icon: <Zap size={14} />, color: 'text-teal bg-teal-light' };
+
+  if (a.includes('dispatch') && a.includes('signalaggreation') || a.includes('dispatch') && a.includes('signal'))
+    return { label: 'Handing off to Signal Analysis', detail: 'Orchestrator dispatched the job to the Signal Aggregation Agent to start collecting behavioural data.', icon: <Radio size={14} />, color: 'text-ai-purple bg-ai-purple-light' };
+
+  if (a.includes('parallel_utility_fan_out') || a.includes('fan_out') || a.includes('fan out'))
+    return { label: 'Scanning data sources in parallel', detail: 'Signal Agent fanned out across purchase history, web sessions, email engagement, and loyalty activity simultaneously.', icon: <Search size={14} />, color: 'text-ai-purple bg-ai-purple-light' };
+
+  if (a.includes('composite_score_computed') || a.includes('score computed') || a.includes('score_computed'))
+    return { label: 'Churn risk score computed', detail: 'Orchestrator combined all signal inputs and calculated a composite churn risk score for this customer.', icon: <BarChart2 size={14} />, color: 'text-high bg-high-light' };
+
+  if (a.includes('dispatch') && a.includes('offer'))
+    return { label: 'Selecting the best offer', detail: 'Orchestrator handed off to the Offer Personalisation Agent to identify the most relevant retention offer.', icon: <Gift size={14} />, color: 'text-teal bg-teal-light' };
+
+  if (a.includes('offer_selected') || a.includes('offer selected'))
+    return { label: 'Offer chosen', detail: 'Offer Agent reviewed the customer's loyalty tier, purchase history, and margin constraints — selected the optimal offer.', icon: <Gift size={14} />, color: 'text-teal bg-teal-light' };
+
+  if (a.includes('dispatch') && a.includes('outreach'))
+    return { label: 'Drafting campaign content', detail: 'Orchestrator sent the approved offer to the Outreach Execution Agent to generate personalised messaging.', icon: <Send size={14} />, color: 'text-teal bg-teal-light' };
+
+  if (a.includes('outreach_content_generated') || a.includes('content generated'))
+    return { label: 'Campaign content drafted', detail: 'Outreach Agent generated personalised email, SMS, and push notification copy tailored to this customer.', icon: <Mail size={14} />, color: 'text-teal bg-teal-light' };
+
+  if (a.includes('awaiting_human') || a.includes('awaiting human') || a.includes('human_approval_required'))
+    return { label: 'Paused — waiting for manager approval', detail: 'This customer is HIGH risk. Workflow is holding and waiting for a human decision before sending the campaign.', icon: <AlertTriangle size={14} />, color: 'text-high bg-high-light' };
+
+  if (a.includes('approval_received') || a.includes('approved'))
+    return { label: 'Manager approved the campaign', detail: 'A retention manager reviewed the brief and approved sending. Workflow is now proceeding to outreach.', icon: <UserCheck size={14} />, color: 'text-low bg-low-light' };
+
+  if (a.includes('rejected') || a.includes('rejection'))
+    return { label: 'Manager rejected the campaign', detail: 'A retention manager reviewed the brief and decided not to send. Workflow has been stopped and logged.', icon: <UserX size={14} />, color: 'text-critical bg-critical-light' };
+
+  if (a.includes('outreach_sent') || a.includes('campaign sent') || a.includes('sent'))
+    return { label: 'Campaign delivered', detail: 'The retention campaign was successfully dispatched across all selected channels (email, SMS, push).', icon: <CheckCircle2 size={14} />, color: 'text-low bg-low-light' };
+
+  if (a.includes('workflow_completed') || a.includes('completed'))
+    return { label: 'Workflow completed', detail: 'All steps finished successfully. Results have been logged and the customer record updated.', icon: <CheckCircle2 size={14} />, color: 'text-low bg-low-light' };
+
+  if (a.includes('conflict') || a.includes('signal_conflict'))
+    return { label: 'Signal conflict detected', detail: `Conflicting signals found during aggregation — ${action}. Orchestrator resolved these before scoring.`, icon: <AlertTriangle size={14} />, color: 'text-high bg-high-light' };
+
+  if (a.includes('guardrail') || a.includes('blocked'))
+    return { label: 'Guardrail triggered', detail: `A safety guardrail blocked this step — ${action}. No message was sent.`, icon: <Shield size={14} />, color: 'text-critical bg-critical-light' };
+
+  // Fallback — make the raw action readable
+  const readable = action.replace(/_/g, ' ').replace(/→/g, '→').replace(/\b\w/g, c => c.toUpperCase());
+  return { label: readable, detail: `${agent} completed this step.`, icon: <Zap size={14} />, color: 'text-gray-3 bg-gray-1' };
+}
+
 function StatusBadge({ status }: { status: string }) {
   const cfg: Record<string, { label: string; cls: string }> = {
     running:            { label: 'Running',           cls: 'bg-teal-light text-teal' },
@@ -314,18 +369,37 @@ export function WorkflowStatusModal({ runId, customerName, onClose }: Props) {
                 </div>
               )}
 
-              {/* Audit trail preview */}
+              {/* Audit trail — huddle feed */}
               {(run.audit_trail ?? []).length > 0 && (
                 <div>
-                  <div className="text-xs text-gray-3 font-medium uppercase tracking-wider mb-2">Audit Trail</div>
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
-                    {(run.audit_trail ?? []).map((entry, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs p-2 bg-gray-1 rounded">
-                        <span className="text-gray-3 flex-shrink-0">{new Date(entry.timestamp).toLocaleTimeString()}</span>
-                        <span className="font-medium text-navy flex-shrink-0">{entry.agent}</span>
-                        <span className="text-gray-3">{entry.action}</span>
-                      </div>
-                    ))}
+                  <div className="text-xs text-gray-3 font-semibold uppercase tracking-wider mb-3">Audit Trail</div>
+                  <div className="relative">
+                    {/* Vertical line */}
+                    <div className="absolute left-4 top-4 bottom-2 w-px bg-gray-2" />
+                    <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
+                      {(run.audit_trail ?? []).map((entry, i) => {
+                        const meta = humaniseAudit(entry.agent, entry.action);
+                        return (
+                          <div key={i} className="flex items-start gap-3 relative">
+                            {/* Icon bubble */}
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${meta.color}`}>
+                              {meta.icon}
+                            </div>
+                            {/* Content */}
+                            <div className="flex-1 pt-0.5 min-w-0">
+                              <div className="flex items-center justify-between gap-2 mb-0.5">
+                                <span className="text-navy font-semibold" style={{ fontSize: '13px' }}>{meta.label}</span>
+                                <span className="text-gray-3 flex-shrink-0" style={{ fontSize: '11px' }}>
+                                  {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </span>
+                              </div>
+                              <p className="text-gray-3 leading-relaxed" style={{ fontSize: '12px' }}>{meta.detail}</p>
+                              <span className="text-gray-3 mt-1 inline-block" style={{ fontSize: '11px', fontStyle: 'italic' }}>{entry.agent}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
