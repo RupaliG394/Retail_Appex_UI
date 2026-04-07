@@ -1,8 +1,13 @@
 import { Bell, Search, ChevronDown } from "lucide-react";
 
-export function TopNav() {
+interface TopNavProps {
+  onAgentLiveClick: () => void;
+  agentPanelOpen: boolean;
+}
+
+export function TopNav({ onAgentLiveClick, agentPanelOpen }: TopNavProps) {
   return (
-    <nav 
+    <nav
       className="sticky top-0 z-50 flex items-center justify-between px-6 bg-navy"
       style={{ height: '64px' }}
     >
@@ -38,14 +43,29 @@ export function TopNav() {
           <span className="absolute top-1 right-1 w-2 h-2 bg-critical rounded-full" />
         </button>
 
-        {/* Agent Status */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-navy-deep rounded-lg">
+        {/* Agent Live toggle */}
+        <button
+          onClick={onAgentLiveClick}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
+            agentPanelOpen
+              ? 'bg-teal text-white'
+              : 'bg-navy-deep text-white hover:bg-teal/20'
+          }`}
+        >
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-low opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-low" />
           </span>
-          <span className="text-white" style={{ fontSize: '13px' }}>Live</span>
-        </div>
+          <span style={{ fontSize: '13px' }}>Agent Live</span>
+          <span
+            className={`px-1.5 py-0.5 rounded font-mono ${
+              agentPanelOpen ? 'bg-white/20 text-white' : 'bg-low/20 text-low'
+            }`}
+            style={{ fontSize: '11px', fontWeight: '700' }}
+          >
+            6
+          </span>
+        </button>
 
         {/* User Menu */}
         <button className="flex items-center gap-3 px-3 py-1.5 hover:bg-navy-deep rounded-lg transition-colors">
