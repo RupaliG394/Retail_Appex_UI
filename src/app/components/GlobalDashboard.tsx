@@ -11,7 +11,9 @@ import {
   FileText
 } from "lucide-react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 import { api, DashboardStats } from "../services/api";
+import { WorkflowStatusModal } from "./WorkflowStatusModal";
 import { 
   LineChart, 
   Line, 
@@ -88,6 +90,32 @@ const activityFeed = [
 
 export function GlobalDashboard() {
   const [dashStats, setDashStats] = useState<DashboardStats | null>(null);
+  const [triggeringIds, setTriggeringIds] = useState<Set<string>>(new Set());
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [activeCustomerName, setActiveCustomerName] = useState<string | undefined>();
+
+  const handleTakeAction = async (customerId: string, customerName: string) => {
+    if (triggeringIds.has(customerId)) return;
+    setTriggeringIds(prev => new Set(prev).add(customerId));
+    const toastId = toast.loading(`Starting retention workflow for ${customerName}…`);
+    try {
+      const res = await api.trigger({
+        customer_id: customerId,
+        event_type: 'session_collapse',
+        source: 'ui_manual_trigger',
+      });
+      setActiveRunId(res.run_id);
+      setActiveCustomerName(customerName);
+      toast.success(`Workflow started for ${customerName}`, {
+        id: toastId,
+        description: `Run ID: ${res.run_id.slice(0, 8)}…`,
+      });
+    } catch {
+      toast.error(`Failed to start workflow for ${customerName}`, { id: toastId });
+    } finally {
+      setTriggeringIds(prev => { const s = new Set(prev); s.delete(customerId); return s; });
+    }
+  };
 
   useEffect(() => {
     const fetchDash = async () => {
@@ -427,8 +455,16 @@ export function GlobalDashboard() {
                   <div className="text-gray-3" style={{ fontSize: '11px' }}>{customer.id}</div>
                   <div className="text-gray-3" style={{ fontSize: '12px' }}>{customer.trigger}</div>
                 </div>
-                <button className="px-3 py-1.5 bg-teal text-white rounded-lg hover:bg-teal-mid transition-colors" style={{ fontSize: '12px', fontWeight: '500' }}>
-                  Review Brief
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleTakeAction(customer.id, customer.name); }}
+                  disabled={triggeringIds.has(customer.id)}
+                  className="px-3 py-1.5 bg-teal text-white rounded-lg hover:bg-teal-mid transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5 flex-shrink-0"
+                  style={{ fontSize: '12px', fontWeight: '500' }}
+                >
+                  {triggeringIds.has(customer.id) && (
+                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  )}
+                  {triggeringIds.has(customer.id) ? 'Processing…' : 'Take Action'}
                 </button>
               </div>
             ))}
@@ -525,6 +561,14 @@ export function GlobalDashboard() {
           </div>
         </div>
       </div>
+
+      {activeRunId && (
+        <WorkflowStatusModal
+          runId={activeRunId}
+          customerName={activeCustomerName}
+          onClose={() => { setActiveRunId(null); setActiveCustomerName(undefined); }}
+        />
+      )}
     </div>
   );
 }
