@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router";
+import { Link, useOutletContext } from "react-router";
 import { Search, ChevronDown, X, Zap } from "lucide-react";
 import { toast } from "sonner";
-import { WorkflowStatusModal } from "./WorkflowStatusModal";
 import { api, MockCustomer } from "../services/api";
+import type { DrawerContext } from "./Layout";
 
 function mapCustomer(c: MockCustomer) {
   const isHighRisk = c.session_collapse_detected;
@@ -34,10 +34,9 @@ function mapCustomer(c: MockCustomer) {
 }
 
 export function CustomerList() {
+  const { openDrawer } = useOutletContext<DrawerContext>();
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [activeFilters, setActiveFilters] = useState<string[]>(['CRITICAL']);
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [activeCustomerName, setActiveCustomerName] = useState<string>('');
   const [apiCustomers, setApiCustomers] = useState<MockCustomer[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
   // per-customer triggering state: Set of customer_ids currently calling /api/trigger
@@ -85,8 +84,7 @@ export function CustomerList() {
         source: 'ui_manual_trigger',
       });
       setTriggeredMap(prev => new Map(prev).set(customerId, res.run_id));
-      setActiveRunId(res.run_id);
-      setActiveCustomerName(customerName);
+      openDrawer(res.run_id, customerName);
       toast.success(`Workflow started for ${customerName}`, {
         id: toastId,
         description: `Run ID: ${res.run_id.slice(0, 8)}…`,
@@ -340,7 +338,7 @@ export function CustomerList() {
                   hasActiveBrief={triggeredMap.has(customer.id)}
                   onViewBrief={() => {
                     const runId = triggeredMap.get(customer.id);
-                    if (runId) { setActiveRunId(runId); setActiveCustomerName(customer.name); }
+                    if (runId) openDrawer(runId, customer.name);
                   }}
                   isLow={customer.scoreType === 'LOW'}
                 />
@@ -377,13 +375,6 @@ export function CustomerList() {
         </div>
       </div>
 
-      {activeRunId && (
-        <WorkflowStatusModal
-          runId={activeRunId}
-          customerName={activeCustomerName}
-          onClose={() => setActiveRunId(null)}
-        />
-      )}
     </div>
   );
 }

@@ -10,10 +10,10 @@ import {
   Shield,
   FileText
 } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { api, DashboardStats } from "../services/api";
-import { WorkflowStatusModal } from "./WorkflowStatusModal";
+import type { DrawerContext } from "./Layout";
 import { 
   LineChart, 
   Line, 
@@ -87,11 +87,10 @@ const activityFeed = [
 ];
 
 export function GlobalDashboard() {
+  const { openDrawer } = useOutletContext<DrawerContext>();
   const [dashStats, setDashStats] = useState<DashboardStats | null>(null);
   const [triggeringIds, setTriggeringIds] = useState<Set<string>>(new Set());
   const [triggeredMap, setTriggeredMap] = useState<Map<string, string>>(new Map());
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [activeCustomerName, setActiveCustomerName] = useState<string | undefined>();
 
   const handleTakeAction = async (customerId: string, customerName: string) => {
     if (triggeringIds.has(customerId)) return;
@@ -104,8 +103,7 @@ export function GlobalDashboard() {
         source: 'ui_manual_trigger',
       });
       setTriggeredMap(prev => new Map(prev).set(customerId, res.run_id));
-      setActiveRunId(res.run_id);
-      setActiveCustomerName(customerName);
+      openDrawer(res.run_id, customerName);
       toast.success(`Workflow started for ${customerName}`, {
         id: toastId,
         description: `Run ID: ${res.run_id.slice(0, 8)}…`,
@@ -119,10 +117,7 @@ export function GlobalDashboard() {
 
   const handleViewActivity = (customerId: string, customerName: string) => {
     const runId = triggeredMap.get(customerId);
-    if (runId) {
-      setActiveRunId(runId);
-      setActiveCustomerName(customerName);
-    }
+    if (runId) openDrawer(runId, customerName);
   };
 
   useEffect(() => {
@@ -580,13 +575,6 @@ export function GlobalDashboard() {
         </div>
       </div>
 
-      {activeRunId && (
-        <WorkflowStatusModal
-          runId={activeRunId}
-          customerName={activeCustomerName}
-          onClose={() => { setActiveRunId(null); setActiveCustomerName(undefined); }}
-        />
-      )}
     </div>
   );
 }
