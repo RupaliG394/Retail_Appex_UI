@@ -230,7 +230,7 @@ function ApprovalForm({ run, onApprove }: { run: WorkflowRun; onApprove: (approv
 
 type AuditMeta = { label: string; detail: string; icon: React.ReactNode; color: string };
 
-function humaniseAudit(agent: string, action: string): AuditMeta {
+function humaniseAudit(agent: string, action: string, entryStatus?: string): AuditMeta {
   const a = action.toLowerCase();
 
   if (a.includes('workflow_initiated') || a.includes('workflow initiated'))
@@ -260,8 +260,11 @@ function humaniseAudit(agent: string, action: string): AuditMeta {
   if (a.includes('awaiting_human') || a.includes('awaiting human') || a.includes('human_approval_required'))
     return { label: 'Paused — waiting for manager approval', detail: 'This customer is HIGH risk. Workflow is holding and waiting for a human decision before sending the campaign.', icon: <AlertTriangle size={14} />, color: 'text-high bg-high-light' };
 
-  if (a.includes('approval_received') || a.includes('approved'))
+  if (a.includes('approval_received') || a.includes('approved')) {
+    if (entryStatus === 'rejected')
+      return { label: 'Manager rejected the campaign', detail: 'A retention manager reviewed the brief and decided not to send. Workflow has been stopped and logged.', icon: <UserX size={14} />, color: 'text-critical bg-critical-light' };
     return { label: 'Manager approved the campaign', detail: 'A retention manager reviewed the brief and approved sending. Workflow is now proceeding to outreach.', icon: <UserCheck size={14} />, color: 'text-low bg-low-light' };
+  }
 
   if (a.includes('rejected') || a.includes('rejection'))
     return { label: 'Manager rejected the campaign', detail: 'A retention manager reviewed the brief and decided not to send. Workflow has been stopped and logged.', icon: <UserX size={14} />, color: 'text-critical bg-critical-light' };
@@ -808,7 +811,7 @@ export function WorkflowStatusPanel({ runId, customerName, onClose }: Props) {
                   <div className="absolute left-4 top-4 bottom-2 w-px bg-gray-2" />
                   <div className="space-y-4 pr-1">
                     {(run.audit_trail ?? []).map((entry, i) => {
-                      const meta = humaniseAudit(entry.agent, entry.action);
+                      const meta = humaniseAudit(entry.agent, entry.action, entry.status);
                       return (
                         <div key={i} className="flex items-start gap-3 relative">
                           {/* Icon bubble */}
@@ -921,7 +924,7 @@ export function WorkflowStatusContent({ runId }: { runId: string }) {
             <div className="absolute left-4 top-4 bottom-2 w-px bg-gray-2" />
             <div className="space-y-4 pr-1">
               {(run.audit_trail ?? []).map((entry, i) => {
-                const meta = humaniseAudit(entry.agent, entry.action);
+                const meta = humaniseAudit(entry.agent, entry.action, entry.status);
                 return (
                   <div key={i} className="flex items-start gap-3 relative">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${meta.color}`}>
