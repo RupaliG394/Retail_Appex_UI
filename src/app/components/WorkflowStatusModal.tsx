@@ -249,7 +249,7 @@ function humaniseAudit(agent: string, action: string): AuditMeta {
     return { label: 'Selecting the best offer', detail: 'Orchestrator handed off to the Offer Personalisation Agent to identify the most relevant retention offer.', icon: <Gift size={14} />, color: 'text-teal bg-teal-light' };
 
   if (a.includes('offer_selected') || a.includes('offer selected'))
-    return { label: 'Offer chosen', detail: 'Offer Agent reviewed the customer's loyalty tier, purchase history, and margin constraints — selected the optimal offer.', icon: <Gift size={14} />, color: 'text-teal bg-teal-light' };
+    return { label: 'Offer chosen', detail: "Offer Agent reviewed the customer's loyalty tier, purchase history, and margin constraints — selected the optimal offer.", icon: <Gift size={14} />, color: 'text-teal bg-teal-light' };
 
   if (a.includes('dispatch') && a.includes('outreach'))
     return { label: 'Drafting campaign content', detail: 'Orchestrator sent the approved offer to the Outreach Execution Agent to generate personalised messaging.', icon: <Send size={14} />, color: 'text-teal bg-teal-light' };
