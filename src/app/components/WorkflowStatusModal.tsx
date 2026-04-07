@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, CheckCircle2, AlertTriangle, Clock, Send, Shield, Sparkles, ChevronRight, ChevronDown, Mail, MessageSquare, Bell, Search, BarChart2, Gift, UserCheck, UserX, Zap, Radio, Brain } from 'lucide-react';
+import { X, XCircle, CheckCircle2, AlertTriangle, Clock, Send, Shield, Sparkles, ChevronRight, ChevronDown, Mail, MessageSquare, Bell, Search, BarChart2, Gift, UserCheck, UserX, Zap, Radio, Brain } from 'lucide-react';
 import { useWorkflowStatus, useApproval } from '../hooks/useWorkflow';
 import type { WorkflowRun } from '../services/api';
 
@@ -380,10 +380,20 @@ const AGENT_STEPS_DEF: AgentStepDef[] = [
   },
 ];
 
-type StepStatus = 'completed' | 'in_progress' | 'needs_approval' | 'pending';
+type StepStatus = 'completed' | 'in_progress' | 'needs_approval' | 'pending' | 'rejected' | 'cancelled';
 
 function getStepStatus(stepKey: string, run: WorkflowRun): StepStatus {
   if (run.workflow_status === 'completed') return 'completed';
+
+  // Rejected or failed — stop the timeline at the approval point
+  if (run.workflow_status === 'rejected' || run.workflow_status === 'failed') {
+    const currentIdx = STEPS.indexOf(run.current_step);
+    const stepIdx = STEPS.indexOf(stepKey);
+    if (stepKey === 'human_approval') return 'rejected';
+    if (stepIdx < currentIdx) return 'completed';
+    return 'cancelled';
+  }
+
   if (stepKey === 'human_approval' && run.awaiting_human) return 'needs_approval';
   const currentIdx = STEPS.indexOf(run.current_step);
   const stepIdx = STEPS.indexOf(stepKey);
@@ -424,7 +434,6 @@ function StepNode({ status, index }: { status: StepStatus; index: number }) {
         <div className="w-8 h-8 rounded-full bg-teal flex items-center justify-center">
           <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
         </div>
-        {/* spinning ring */}
         <div className="absolute inset-0 rounded-full border-2 border-teal border-t-transparent animate-spin" style={{ margin: '-3px' }} />
       </div>
     );
@@ -433,6 +442,20 @@ function StepNode({ status, index }: { status: StepStatus; index: number }) {
     return (
       <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0 z-10 shadow-sm">
         <AlertTriangle size={14} className="text-white" />
+      </div>
+    );
+  }
+  if (status === 'rejected') {
+    return (
+      <div className="w-8 h-8 rounded-full bg-critical flex items-center justify-center flex-shrink-0 z-10 shadow-sm">
+        <XCircle size={15} className="text-white" />
+      </div>
+    );
+  }
+  if (status === 'cancelled') {
+    return (
+      <div className="w-8 h-8 rounded-full bg-white border-2 border-gray-2 flex items-center justify-center flex-shrink-0 z-10 opacity-40">
+        <X size={13} className="text-gray-3" />
       </div>
     );
   }
@@ -449,14 +472,18 @@ function AgentAccordion({ run }: { run: WorkflowRun }) {
   const activeKey = run.awaiting_human ? 'human_approval' : run.current_step;
 
   // Only the active step is open; auto-collapses previous steps as workflow advances
-  const [openKeys, setOpenKeys] = useState<Set<string>>(
-    () => new Set(run.workflow_status === 'completed' ? [] : [activeKey])
-  );
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() => {
+    if (run.workflow_status === 'completed') return new Set();
+    if (run.workflow_status === 'rejected' || run.workflow_status === 'failed') return new Set(['human_approval']);
+    return new Set([activeKey]);
+  });
 
   // When the workflow advances (WebSocket update), auto-expand new step & collapse old
   useEffect(() => {
     if (run.workflow_status === 'completed') {
       setOpenKeys(new Set());
+    } else if (run.workflow_status === 'rejected' || run.workflow_status === 'failed') {
+      setOpenKeys(new Set(['human_approval']));
     } else {
       setOpenKeys(new Set([activeKey]));
     }
@@ -503,6 +530,8 @@ function AgentAccordion({ run }: { run: WorkflowRun }) {
                   status === 'in_progress'    ? 'border-teal shadow-sm shadow-teal/10' :
                   status === 'needs_approval' ? 'border-amber-300 shadow-sm shadow-amber-100' :
                   status === 'completed'      ? 'border-low/30' :
+                  status === 'rejected'       ? 'border-critical shadow-sm shadow-critical/10' :
+                  status === 'cancelled'      ? 'border-gray-2 opacity-40' :
                   'border-gray-2'
                 }`}>
                   {/* Header */}
@@ -511,6 +540,8 @@ function AgentAccordion({ run }: { run: WorkflowRun }) {
                       status === 'in_progress'    ? 'bg-teal-light/30 hover:bg-teal-light/50' :
                       status === 'needs_approval' ? 'bg-amber-50 hover:bg-amber-50/80' :
                       status === 'completed'      ? 'bg-low-light/20 hover:bg-low-light/30' :
+                      status === 'rejected'       ? 'bg-critical-light hover:bg-critical-light/80' :
+                      status === 'cancelled'      ? 'bg-gray-1/40' :
                       'bg-gray-1/60 hover:bg-gray-1'
                     }`}
                     onClick={() => toggle(stepDef.stepKey)}
@@ -542,6 +573,15 @@ function AgentAccordion({ run }: { run: WorkflowRun }) {
                         {status === 'completed' && (
                           <span className="text-low" style={{ fontSize: '11px', fontWeight: '600' }}>✓ Completed</span>
                         )}
+                        {status === 'rejected' && (
+                          <span className="flex items-center gap-1 text-critical" style={{ fontSize: '11px', fontWeight: '600' }}>
+                            <XCircle size={11} />
+                            Rejected — Workflow Stopped
+                          </span>
+                        )}
+                        {status === 'cancelled' && (
+                          <span className="text-gray-3" style={{ fontSize: '11px' }}>Cancelled</span>
+                        )}
                         {status === 'pending' && (
                           <span className="text-gray-3" style={{ fontSize: '11px' }}>Pending</span>
                         )}
@@ -552,6 +592,8 @@ function AgentAccordion({ run }: { run: WorkflowRun }) {
                           {status === 'completed'      ? `All ${totalTasks} tasks completed` :
                            status === 'in_progress'    ? `${doneTasks} of ${totalTasks} tasks done — working…` :
                            status === 'needs_approval' ? 'Waiting for manager decision' :
+                           status === 'rejected'       ? 'Campaign rejected — no message sent to customer' :
+                           status === 'cancelled'      ? 'Not executed — workflow stopped before this step' :
                            stepDef.description.slice(0, 60) + '…'}
                         </div>
                       )}
@@ -726,6 +768,22 @@ export function WorkflowStatusPanel({ runId, customerName, onClose }: Props) {
         ) : (
           <>
             <StepIndicator run={run} />
+
+            {(run.workflow_status === 'rejected' || run.workflow_status === 'failed') && (
+              <div className="mb-5 p-4 bg-critical-light border border-critical/30 rounded-xl flex items-start gap-3">
+                <XCircle size={18} className="text-critical flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-critical font-semibold" style={{ fontSize: '14px' }}>
+                    Workflow stopped — no campaign sent
+                  </p>
+                  <p className="text-critical/80 mt-0.5" style={{ fontSize: '12px' }}>
+                    This retention workflow was rejected at the approval stage. The customer has not received any message.
+                    {run.approval_reason ? ` Reason: "${run.approval_reason}"` : ''}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <AgentAccordion run={run} />
             <ScoreDisplay run={run} />
             <ConflictsDisplay conflicts={run.signal_conflicts ?? []} />
@@ -824,6 +882,24 @@ export function WorkflowStatusContent({ runId }: { runId: string }) {
         <span className="text-gray-3 text-xs">Run {runId.slice(0, 8)}…</span>
       </div>
       <StepIndicator run={run} />
+
+      {/* Rejection banner */}
+      {(run.workflow_status === 'rejected' || run.workflow_status === 'failed') && (
+        <div className="mb-5 p-4 bg-critical-light border border-critical/30 rounded-xl flex items-start gap-3">
+          <XCircle size={18} className="text-critical flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-critical font-semibold" style={{ fontSize: '14px' }}>
+              Workflow stopped — no campaign sent
+            </p>
+            <p className="text-critical/80 mt-0.5" style={{ fontSize: '12px' }}>
+              This retention workflow was rejected at the approval stage.
+              The customer has not received any message.
+              {run.approval_reason ? ` Reason: "${run.approval_reason}"` : ''}
+            </p>
+          </div>
+        </div>
+      )}
+
       <AgentAccordion run={run} />
       <ScoreDisplay run={run} />
       <ConflictsDisplay conflicts={run.signal_conflicts ?? []} />
