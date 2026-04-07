@@ -166,7 +166,7 @@ export function CustomerList() {
             ) : (
               <Zap size={16} />
             )}
-            {isAutoTriggering ? 'Auto-Briefing…' : 'Auto-Brief ALL LOW'}
+            {isAutoTriggering ? 'Triggering…' : 'Non-Critical Batch Trigger'}
           </button>
           <button className="px-4 py-2 bg-teal text-white rounded-lg hover:bg-teal-mid transition-colors" style={{ fontSize: '14px', fontWeight: '500' }}>
             + Add Filter
