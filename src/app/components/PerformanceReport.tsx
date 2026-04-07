@@ -140,66 +140,6 @@ export function PerformanceReport() {
         </div>
       </div>
 
-      {/* Churn Rate Trend */}
-      <div className="bg-white rounded-xl border border-gray-2 p-6" style={{ boxShadow: 'var(--shadow-l1)' }}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-navy">Churn Rate: Before vs After</h3>
-          <div className="flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-gray-3 rounded-full"></div>
-              <span className="text-gray-3">Before (Baseline)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-low rounded-full"></div>
-              <span className="text-gray-3">After (With Agent)</span>
-            </div>
-          </div>
-        </div>
-        <ResponsiveContainer width="100%" height={350}>
-          <LineChart data={churnTrendData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#D0D5DD" />
-            <XAxis 
-              dataKey="month" 
-              tick={{ fill: '#8896A7', fontSize: 12 }}
-              stroke="#D0D5DD"
-            />
-            <YAxis 
-              tick={{ fill: '#8896A7', fontSize: 12 }}
-              stroke="#D0D5DD"
-              domain={[0, 30]}
-              label={{ value: 'Churn Rate (%)', angle: -90, position: 'insideLeft', style: { fill: '#8896A7', fontSize: 12 } }}
-            />
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: '#FFFFFF', 
-                border: '1px solid #D0D5DD',
-                borderRadius: '8px',
-                fontSize: '13px'
-              }}
-              formatter={(value: number) => `${value.toFixed(1)}%`}
-            />
-            <Legend wrapperStyle={{ fontSize: '13px' }} />
-            <Line 
-              type="monotone" 
-              dataKey="before" 
-              stroke="#8896A7" 
-              strokeWidth={2}
-              strokeDasharray="5 5"
-              name="Before"
-              dot={{ fill: '#8896A7', r: 4 }}
-            />
-            <Line 
-              type="monotone" 
-              dataKey="after" 
-              stroke="#1A6B3C" 
-              strokeWidth={3}
-              name="After"
-              dot={{ fill: '#1A6B3C', r: 5 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
       {/* Revenue Impact */}
       <div className="bg-white rounded-xl border border-gray-2 p-6" style={{ boxShadow: 'var(--shadow-l1)' }}>
         <div className="flex items-center justify-between mb-4">
