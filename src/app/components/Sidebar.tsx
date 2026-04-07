@@ -41,7 +41,7 @@ const navigation: NavSection[] = [
   {
     title: "OPERATIONS",
     items: [
-      { icon: CheckSquare, label: "Approval Queue", href: "/approval-queue", badge: "7" },
+      { icon: CheckSquare, label: "Approval Queue", href: "/approval-queue" },
       { icon: Users, label: "Customer List", href: "/customers" },
       { icon: Clock, label: "Customer Timeline", href: "/timeline" },
       { icon: Bot, label: "Agent Activity Log", href: "/agent-activity" },
