@@ -9,12 +9,18 @@ import {
   ShoppingCart,
   DollarSign,
   TrendingUp,
+  TrendingDown,
   AlertTriangle,
   Sparkles,
   Star,
   Send,
   FileText,
-  Activity
+  Activity,
+  Award,
+  MessageSquare,
+  Bell,
+  CheckCircle2,
+  Filter
 } from "lucide-react";
 import {
   LineChart,
@@ -96,6 +102,71 @@ const customerData = {
     { month: 'Jan', sessions: 8, emails: 6, redemptions: 0 },
     { month: 'Feb', sessions: 3, emails: 2, redemptions: 0 },
     { month: 'Mar', sessions: 1, emails: 1, redemptions: 0 }
+  ],
+  activityLog: [
+    {
+      id: 'al-001',
+      date: '2026-04-06T10:00:00Z',
+      type: 'risk_change',
+      channel: 'System',
+      title: 'Churn Risk Decreased',
+      description: 'Risk score improved from 89 to 78 after email engagement',
+      badge: { label: 'Risk Score: 78', variant: 'amber' }
+    },
+    {
+      id: 'al-002',
+      date: '2026-04-06T09:30:00Z',
+      type: 'loyalty',
+      channel: 'System',
+      title: 'Loyalty Points Awarded',
+      description: 'Bonus points added as part of retention campaign',
+      badge: { label: '+500 points', variant: 'amber' }
+    },
+    {
+      id: 'al-003',
+      date: '2026-04-06T08:15:00Z',
+      type: 'email',
+      channel: 'Emails',
+      title: 'Email Sent: Win-Back Campaign',
+      description: 'Subject: "We miss you! Exclusive offer inside" — Opened after 2 hours',
+      badge: { label: 'Email', variant: 'teal' }
+    },
+    {
+      id: 'al-004',
+      date: '2026-04-05T15:42:00Z',
+      type: 'alert',
+      channel: 'System',
+      title: 'Churn Risk Alert Generated',
+      description: 'Risk score escalated from 72 to 89 — assigned for immediate review',
+      badge: { label: 'Risk Score: 89', variant: 'red' }
+    },
+    {
+      id: 'al-005',
+      date: '2026-04-04T11:00:00Z',
+      type: 'sms',
+      channel: 'SMS',
+      title: 'SMS Sent: Loyalty Reminder',
+      description: 'You have 3,450 points ready to use — reminder sent',
+      badge: { label: 'SMS', variant: 'purple' }
+    },
+    {
+      id: 'al-006',
+      date: '2026-03-28T09:00:00Z',
+      type: 'loyalty',
+      channel: 'System',
+      title: 'Zero Redemption Signal Detected',
+      description: 'No loyalty redemptions in 60 days — flagged for outreach',
+      badge: { label: 'Loyalty Signal', variant: 'amber' }
+    },
+    {
+      id: 'al-007',
+      date: '2026-03-12T10:45:00Z',
+      type: 'email',
+      channel: 'Emails',
+      title: 'Email Sent: Double Points Offer',
+      description: 'Promotional email delivered — no engagement recorded',
+      badge: { label: 'Email', variant: 'teal' }
+    }
   ]
 };
 
@@ -127,11 +198,71 @@ const formatDateTime = (dateString: string) => {
   });
 };
 
+const getRelativeTime = (dateString: string) => {
+  const now = new Date('2026-04-07T12:00:00Z');
+  const date = new Date(dateString);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return '1 day ago';
+  return `${diffDays} days ago`;
+};
+
+const activityIcon = (type: string) => {
+  switch (type) {
+    case 'email': return <Mail className="w-5 h-5 text-teal" />;
+    case 'sms': return <MessageSquare className="w-5 h-5 text-ai-purple" />;
+    case 'loyalty': return <Award className="w-5 h-5 text-amber-500" />;
+    case 'risk_change': return <TrendingDown className="w-5 h-5 text-critical" />;
+    case 'alert': return <Bell className="w-5 h-5 text-critical" />;
+    default: return <Activity className="w-5 h-5 text-gray-3" />;
+  }
+};
+
+const activityIconBg = (type: string) => {
+  switch (type) {
+    case 'email': return 'bg-teal-light';
+    case 'sms': return 'bg-ai-purple-light';
+    case 'loyalty': return 'bg-amber-50';
+    case 'risk_change': return 'bg-critical-light';
+    case 'alert': return 'bg-critical-light';
+    default: return 'bg-gray-1';
+  }
+};
+
+const badgeStyle = (variant: string) => {
+  switch (variant) {
+    case 'teal': return 'bg-teal-light text-teal border border-teal/20';
+    case 'amber': return 'bg-amber-50 text-amber-700 border border-amber-200';
+    case 'red': return 'bg-critical-light text-critical border border-critical/20';
+    case 'purple': return 'bg-ai-purple-light text-ai-purple border border-ai-purple/20';
+    default: return 'bg-gray-1 text-gray-3 border border-gray-2';
+  }
+};
+
 export function CustomerDetail() {
   const { id } = useParams();
   const customer = customerData; // In real app, fetch by ID
   const { trigger, isLoading: isTriggering } = useTriggerWorkflow();
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [logChannelFilter, setLogChannelFilter] = useState<string>('All');
+  const [logTimeFilter, setLogTimeFilter] = useState<string>('Last 90 Days');
+
+  const filteredActivityLog = customer.activityLog.filter(entry => {
+    const channelMatch = logChannelFilter === 'All' || entry.channel === logChannelFilter;
+    const now = new Date('2026-04-07T12:00:00Z');
+    const entryDate = new Date(entry.date);
+    const diffDays = (now.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24);
+    const timeMatch =
+      logTimeFilter === 'All Time' ? true :
+      logTimeFilter === 'Last 7 Days' ? diffDays <= 7 :
+      logTimeFilter === 'Last 30 Days' ? diffDays <= 30 :
+      diffDays <= 90;
+    return channelMatch && timeMatch;
+  });
 
   const handleTriggerBrief = async () => {
     const runId = await trigger(customer.id);
@@ -464,6 +595,91 @@ export function CustomerDetail() {
             </ul>
           </div>
         </div>
+      </div>
+
+      {/* Activity Log */}
+      <div className="bg-white rounded-xl border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
+        <div className="p-5 border-b border-gray-2">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h3 className="text-navy">Activity Log</h3>
+              <p className="text-gray-3 mt-1" style={{ fontSize: '13px' }}>
+                Complete timeline of interactions and events for {customer.name}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <select
+                value={logChannelFilter}
+                onChange={e => setLogChannelFilter(e.target.value)}
+                className="border border-gray-2 rounded-lg px-3 py-2 text-navy bg-white cursor-pointer hover:border-teal transition-colors"
+                style={{ fontSize: '13px', fontWeight: '500', outline: 'none' }}
+              >
+                {['All', 'Emails', 'SMS', 'Push', 'System'].map(opt => (
+                  <option key={opt}>{opt}</option>
+                ))}
+              </select>
+              <select
+                value={logTimeFilter}
+                onChange={e => setLogTimeFilter(e.target.value)}
+                className="border border-gray-2 rounded-lg px-3 py-2 text-navy bg-white cursor-pointer hover:border-teal transition-colors"
+                style={{ fontSize: '13px', fontWeight: '500', outline: 'none' }}
+              >
+                {['Last 7 Days', 'Last 30 Days', 'Last 90 Days', 'All Time'].map(opt => (
+                  <option key={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {filteredActivityLog.length === 0 ? (
+          <div className="p-10 text-center text-gray-3" style={{ fontSize: '14px' }}>
+            No activity found for the selected filters.
+          </div>
+        ) : (
+          <div className="p-5">
+            <div className="relative">
+              {/* Vertical timeline line */}
+              <div
+                className="absolute left-5 top-5 bottom-5 w-px bg-gray-2"
+                style={{ marginLeft: '-0.5px' }}
+              />
+              <div className="space-y-6">
+                {filteredActivityLog.map((entry, idx) => (
+                  <div key={entry.id} className="flex items-start gap-4 relative">
+                    {/* Icon */}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${activityIconBg(entry.type)}`}>
+                      {activityIcon(entry.type)}
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0 pt-1">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-navy" style={{ fontSize: '15px', fontWeight: '600' }}>
+                              {entry.title}
+                            </p>
+                            <CheckCircle2 className="w-4 h-4 text-low flex-shrink-0" />
+                          </div>
+                          <p className="text-gray-3 mb-2" style={{ fontSize: '14px' }}>
+                            {entry.description}
+                          </p>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${badgeStyle(entry.badge.variant)}`}>
+                            {entry.badge.label}
+                          </span>
+                        </div>
+                        <span className="text-gray-3 flex-shrink-0 pt-0.5" style={{ fontSize: '13px' }}>
+                          {getRelativeTime(entry.date)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {activeRunId && (
