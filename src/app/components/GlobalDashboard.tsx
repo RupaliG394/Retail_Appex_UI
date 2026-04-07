@@ -91,6 +91,7 @@ const activityFeed = [
 export function GlobalDashboard() {
   const [dashStats, setDashStats] = useState<DashboardStats | null>(null);
   const [triggeringIds, setTriggeringIds] = useState<Set<string>>(new Set());
+  const [triggeredMap, setTriggeredMap] = useState<Map<string, string>>(new Map());
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeCustomerName, setActiveCustomerName] = useState<string | undefined>();
 
@@ -104,6 +105,7 @@ export function GlobalDashboard() {
         event_type: 'session_collapse',
         source: 'ui_manual_trigger',
       });
+      setTriggeredMap(prev => new Map(prev).set(customerId, res.run_id));
       setActiveRunId(res.run_id);
       setActiveCustomerName(customerName);
       toast.success(`Workflow started for ${customerName}`, {
@@ -114,6 +116,14 @@ export function GlobalDashboard() {
       toast.error(`Failed to start workflow for ${customerName}`, { id: toastId });
     } finally {
       setTriggeringIds(prev => { const s = new Set(prev); s.delete(customerId); return s; });
+    }
+  };
+
+  const handleViewActivity = (customerId: string, customerName: string) => {
+    const runId = triggeredMap.get(customerId);
+    if (runId) {
+      setActiveRunId(runId);
+      setActiveCustomerName(customerName);
     }
   };
 
@@ -455,17 +465,27 @@ export function GlobalDashboard() {
                   <div className="text-gray-3" style={{ fontSize: '11px' }}>{customer.id}</div>
                   <div className="text-gray-3" style={{ fontSize: '12px' }}>{customer.trigger}</div>
                 </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleTakeAction(customer.id, customer.name); }}
-                  disabled={triggeringIds.has(customer.id)}
-                  className="px-3 py-1.5 bg-teal text-white rounded-lg hover:bg-teal-mid transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5 flex-shrink-0"
-                  style={{ fontSize: '12px', fontWeight: '500' }}
-                >
-                  {triggeringIds.has(customer.id) && (
-                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  )}
-                  {triggeringIds.has(customer.id) ? 'Processing…' : 'Take Action'}
-                </button>
+                {triggeredMap.has(customer.id) ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleViewActivity(customer.id, customer.name); }}
+                    className="px-3 py-1.5 bg-low text-white rounded-lg hover:bg-low/80 transition-colors flex items-center gap-1.5 flex-shrink-0"
+                    style={{ fontSize: '12px', fontWeight: '500' }}
+                  >
+                    View Activity
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleTakeAction(customer.id, customer.name); }}
+                    disabled={triggeringIds.has(customer.id)}
+                    className="px-3 py-1.5 bg-teal text-white rounded-lg hover:bg-teal-mid transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5 flex-shrink-0"
+                    style={{ fontSize: '12px', fontWeight: '500' }}
+                  >
+                    {triggeringIds.has(customer.id) && (
+                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    )}
+                    {triggeringIds.has(customer.id) ? 'Processing…' : 'Take Action'}
+                  </button>
+                )}
               </div>
             ))}
           </div>
