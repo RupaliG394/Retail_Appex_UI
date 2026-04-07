@@ -384,33 +384,7 @@ export function CustomerDetail() {
                 </div>
               </div>
 
-              {/* Take Action button — always in header */}
-              <div className="mt-4">
-                {runParam ? (
-                  <button
-                    onClick={() => setTab('actions')}
-                    className="px-4 py-2 bg-low text-white rounded-lg hover:bg-low/80 transition-colors flex items-center gap-2"
-                    style={{ fontSize: '13px', fontWeight: '500' }}
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    View Active Workflow
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleTriggerBrief}
-                    disabled={isTriggering}
-                    className="px-4 py-2 bg-teal text-white rounded-lg hover:bg-teal-mid transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                    style={{ fontSize: '13px', fontWeight: '500' }}
-                  >
-                    {isTriggering ? (
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Zap className="w-4 h-4" />
-                    )}
-                    {isTriggering ? 'Starting workflow…' : 'Take Action'}
-                  </button>
-                )}
-              </div>
+
             </div>
           </div>
 
