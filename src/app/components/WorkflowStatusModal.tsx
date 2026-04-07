@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, CheckCircle2, AlertTriangle, Clock, Send, Shield, Sparkles, ChevronRight, ChevronDown, Mail, MessageSquare, Bell, Search, BarChart2, Gift, UserCheck, UserX, Zap, Radio, Brain } from 'lucide-react';
 import { useWorkflowStatus, useApproval } from '../hooks/useWorkflow';
 import type { WorkflowRun } from '../services/api';
@@ -409,29 +409,58 @@ function auditCountForStep(stepKey: string, run: WorkflowRun): number {
   ).length;
 }
 
-function AgentStatusChip({ status }: { status: StepStatus }) {
-  const cfg = {
-    completed:      { label: 'Completed',       cls: 'bg-low-light text-low' },
-    in_progress:    { label: 'In Progress',     cls: 'bg-teal-light text-teal' },
-    needs_approval: { label: 'Needs Approval',  cls: 'bg-amber-50 text-amber-600 border border-amber-200' },
-    pending:        { label: 'Pending',          cls: 'bg-gray-1 text-gray-3' },
-  }[status];
+// Status node shown on the left timeline spine
+function StepNode({ status, index }: { status: StepStatus; index: number }) {
+  if (status === 'completed') {
+    return (
+      <div className="w-8 h-8 rounded-full bg-low flex items-center justify-center flex-shrink-0 z-10 shadow-sm">
+        <CheckCircle2 size={15} className="text-white" />
+      </div>
+    );
+  }
+  if (status === 'in_progress') {
+    return (
+      <div className="relative flex-shrink-0 z-10">
+        <div className="w-8 h-8 rounded-full bg-teal flex items-center justify-center">
+          <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+        </div>
+        {/* spinning ring */}
+        <div className="absolute inset-0 rounded-full border-2 border-teal border-t-transparent animate-spin" style={{ margin: '-3px' }} />
+      </div>
+    );
+  }
+  if (status === 'needs_approval') {
+    return (
+      <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0 z-10 shadow-sm">
+        <AlertTriangle size={14} className="text-white" />
+      </div>
+    );
+  }
+  // pending
   return (
-    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full flex-shrink-0 ${cfg.cls}`} style={{ fontSize: '11px', fontWeight: '600' }}>
-      {status === 'in_progress' && <span className="w-1.5 h-1.5 rounded-full bg-teal animate-ping inline-block" />}
-      {status === 'needs_approval' && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse inline-block" />}
-      {cfg.label}
-    </span>
+    <div className="w-8 h-8 rounded-full bg-white border-2 border-gray-2 flex items-center justify-center flex-shrink-0 z-10">
+      <span className="text-gray-3 font-mono font-bold" style={{ fontSize: '11px' }}>{index + 1}</span>
+    </div>
   );
 }
 
 function AgentAccordion({ run }: { run: WorkflowRun }) {
-  // Auto-open the in_progress / needs_approval step
-  const [openKeys, setOpenKeys] = useState<Set<string>>(() => {
-    const currentStatus = getStepStatus(run.current_step, run);
-    if (currentStatus === 'needs_approval') return new Set(['human_approval']);
-    return new Set([run.current_step]);
-  });
+  // Derive the key that should be auto-expanded
+  const activeKey = run.awaiting_human ? 'human_approval' : run.current_step;
+
+  // Only the active step is open; auto-collapses previous steps as workflow advances
+  const [openKeys, setOpenKeys] = useState<Set<string>>(
+    () => new Set(run.workflow_status === 'completed' ? [] : [activeKey])
+  );
+
+  // When the workflow advances (WebSocket update), auto-expand new step & collapse old
+  useEffect(() => {
+    if (run.workflow_status === 'completed') {
+      setOpenKeys(new Set());
+    } else {
+      setOpenKeys(new Set([activeKey]));
+    }
+  }, [activeKey, run.workflow_status]);
 
   const toggle = (key: string) => setOpenKeys(prev => {
     const next = new Set(prev);
@@ -445,164 +474,183 @@ function AgentAccordion({ run }: { run: WorkflowRun }) {
 
   return (
     <div className="mb-6">
-      <div className="text-xs text-gray-3 font-semibold uppercase tracking-wider mb-3">Agent Workflow</div>
-      <div className="space-y-2">
-        {visibleSteps.map((stepDef) => {
-          const status = getStepStatus(stepDef.stepKey, run);
-          const isOpen = openKeys.has(stepDef.stepKey);
-          const Icon = stepDef.icon;
-          const auditCount = auditCountForStep(stepDef.stepKey, run);
+      <div className="text-xs text-gray-3 font-semibold uppercase tracking-wider mb-4">Agent Workflow</div>
 
-          // Determine how many tasks to show as "done" within this step
-          const totalTasks = stepDef.tasks.length;
-          let doneTasks = 0;
-          if (status === 'completed') doneTasks = totalTasks;
-          else if (status === 'in_progress') doneTasks = Math.min(Math.max(auditCount - 1, 0), totalTasks - 1);
-          else if (status === 'needs_approval') doneTasks = 2; // first two tasks done, third is waiting
+      {/* Timeline container */}
+      <div className="relative">
+        {/* Vertical spine */}
+        <div className="absolute left-4 top-4 bottom-4 w-px bg-gray-2" style={{ zIndex: 0 }} />
 
-          return (
-            <div key={stepDef.stepKey} className={`border rounded-lg overflow-hidden ${
-              status === 'in_progress' ? 'border-teal' :
-              status === 'needs_approval' ? 'border-amber-300' :
-              status === 'completed' ? 'border-low/40' :
-              'border-gray-2'
-            }`}>
-              {/* Accordion header */}
-              <button
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  status === 'in_progress' ? 'bg-teal-light/40 hover:bg-teal-light/60' :
-                  status === 'needs_approval' ? 'bg-amber-50 hover:bg-amber-100/60' :
-                  status === 'completed' ? 'bg-white hover:bg-gray-1' :
-                  'bg-gray-1/50 hover:bg-gray-1'
-                }`}
-                onClick={() => toggle(stepDef.stepKey)}
-              >
-                {/* Icon */}
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${stepDef.color}`}>
-                  <Icon size={14} />
-                </div>
+        <div className="space-y-3">
+          {visibleSteps.map((stepDef, idx) => {
+            const status = getStepStatus(stepDef.stepKey, run);
+            const isOpen = openKeys.has(stepDef.stepKey);
+            const Icon = stepDef.icon;
+            const auditCount = auditCountForStep(stepDef.stepKey, run);
+            const totalTasks = stepDef.tasks.length;
+            let doneTasks = 0;
+            if (status === 'completed') doneTasks = totalTasks;
+            else if (status === 'in_progress') doneTasks = Math.min(Math.max(auditCount - 1, 0), totalTasks - 1);
+            else if (status === 'needs_approval') doneTasks = 2;
 
-                {/* Agent name */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-navy font-semibold truncate" style={{ fontSize: '13px' }}>
-                    {stepDef.agent}
-                  </div>
-                  {!isOpen && status !== 'pending' && (
-                    <div className="text-gray-3 truncate" style={{ fontSize: '11px' }}>
-                      {status === 'completed'
-                        ? `${totalTasks} tasks completed`
-                        : status === 'needs_approval'
-                        ? 'Waiting for manager decision'
-                        : `${doneTasks} / ${totalTasks} tasks done`}
+            return (
+              <div key={stepDef.stepKey} className="flex gap-3">
+                {/* Left: status node */}
+                <StepNode status={status} index={idx} />
+
+                {/* Right: accordion card */}
+                <div className={`flex-1 min-w-0 border rounded-xl overflow-hidden transition-all ${
+                  status === 'in_progress'    ? 'border-teal shadow-sm shadow-teal/10' :
+                  status === 'needs_approval' ? 'border-amber-300 shadow-sm shadow-amber-100' :
+                  status === 'completed'      ? 'border-low/30' :
+                  'border-gray-2'
+                }`}>
+                  {/* Header */}
+                  <button
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      status === 'in_progress'    ? 'bg-teal-light/30 hover:bg-teal-light/50' :
+                      status === 'needs_approval' ? 'bg-amber-50 hover:bg-amber-50/80' :
+                      status === 'completed'      ? 'bg-low-light/20 hover:bg-low-light/30' :
+                      'bg-gray-1/60 hover:bg-gray-1'
+                    }`}
+                    onClick={() => toggle(stepDef.stepKey)}
+                  >
+                    {/* Agent icon */}
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${stepDef.color}`}>
+                      <Icon size={13} />
                     </div>
-                  )}
-                </div>
 
-                {/* Status chip */}
-                <AgentStatusChip status={status} />
+                    {/* Text */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-navy font-semibold" style={{ fontSize: '13px' }}>
+                          {stepDef.agent}
+                        </span>
+                        {/* Inline status label */}
+                        {status === 'in_progress' && (
+                          <span className="flex items-center gap-1 text-teal" style={{ fontSize: '11px', fontWeight: '600' }}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-teal animate-ping inline-block" />
+                            In Progress
+                          </span>
+                        )}
+                        {status === 'needs_approval' && (
+                          <span className="flex items-center gap-1 text-amber-600" style={{ fontSize: '11px', fontWeight: '600' }}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse inline-block" />
+                            Needs Approval
+                          </span>
+                        )}
+                        {status === 'completed' && (
+                          <span className="text-low" style={{ fontSize: '11px', fontWeight: '600' }}>✓ Completed</span>
+                        )}
+                        {status === 'pending' && (
+                          <span className="text-gray-3" style={{ fontSize: '11px' }}>Pending</span>
+                        )}
+                      </div>
+                      {/* Collapsed summary */}
+                      {!isOpen && (
+                        <div className="text-gray-3 truncate mt-0.5" style={{ fontSize: '11px' }}>
+                          {status === 'completed'      ? `All ${totalTasks} tasks completed` :
+                           status === 'in_progress'    ? `${doneTasks} of ${totalTasks} tasks done — working…` :
+                           status === 'needs_approval' ? 'Waiting for manager decision' :
+                           stepDef.description.slice(0, 60) + '…'}
+                        </div>
+                      )}
+                    </div>
 
-                {/* Chevron */}
-                <ChevronDown
-                  size={14}
-                  className={`text-gray-3 transition-transform flex-shrink-0 ml-1 ${isOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
+                    <ChevronDown
+                      size={14}
+                      className={`text-gray-3 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
 
-              {/* Accordion body */}
-              {isOpen && (
-                <div className="px-4 pb-4 pt-3 border-t border-gray-2 bg-white">
-                  {/* Description */}
-                  <p className="text-gray-3 mb-4" style={{ fontSize: '12px', lineHeight: '1.6' }}>
-                    {stepDef.description}
-                  </p>
+                  {/* Body */}
+                  {isOpen && (
+                    <div className="px-4 pt-3 pb-4 border-t border-gray-2 bg-white">
+                      <p className="text-gray-3 mb-3" style={{ fontSize: '12px', lineHeight: '1.6' }}>
+                        {stepDef.description}
+                      </p>
 
-                  {/* Task checklist */}
-                  <div className="space-y-2">
-                    {stepDef.tasks.map((task, ti) => {
-                      const isDone = ti < doneTasks;
-                      const isActive = ti === doneTasks && status === 'in_progress';
-                      const isWaiting = ti === doneTasks && status === 'needs_approval';
+                      {/* Task list */}
+                      <div className="space-y-1.5">
+                        {stepDef.tasks.map((task, ti) => {
+                          const isDone    = ti < doneTasks;
+                          const isActive  = ti === doneTasks && status === 'in_progress';
+                          const isWaiting = ti === doneTasks && status === 'needs_approval';
 
-                      return (
-                        <div key={ti} className={`flex items-center gap-2.5 py-1.5 px-3 rounded-lg ${
-                          isActive ? 'bg-teal-light' :
-                          isWaiting ? 'bg-amber-50' :
-                          isDone ? 'bg-low-light/30' :
-                          'bg-gray-1'
-                        }`}>
-                          {isDone ? (
-                            <CheckCircle2 size={13} className="text-low flex-shrink-0" />
-                          ) : isActive ? (
-                            <span className="w-3 h-3 rounded-full border-2 border-teal border-t-transparent animate-spin flex-shrink-0" />
-                          ) : isWaiting ? (
-                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse flex-shrink-0" />
-                          ) : (
-                            <Clock size={13} className="text-gray-3 flex-shrink-0" />
-                          )}
-                          <span className={`${
-                            isDone ? 'text-navy' :
-                            isActive ? 'text-teal font-semibold' :
-                            isWaiting ? 'text-amber-700 font-semibold' :
-                            'text-gray-3'
-                          }`} style={{ fontSize: '12px' }}>
-                            {task}
+                          return (
+                            <div key={ti} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg ${
+                              isActive  ? 'bg-teal-light border border-teal/20' :
+                              isWaiting ? 'bg-amber-50 border border-amber-200' :
+                              isDone    ? 'bg-low-light/25' :
+                              'bg-gray-1'
+                            }`}>
+                              {isDone ? (
+                                <CheckCircle2 size={13} className="text-low flex-shrink-0" />
+                              ) : isActive ? (
+                                <span className="w-3 h-3 rounded-full border-2 border-teal border-t-transparent animate-spin flex-shrink-0" />
+                              ) : isWaiting ? (
+                                <AlertTriangle size={13} className="text-amber-500 flex-shrink-0" />
+                              ) : (
+                                <Clock size={13} className="text-gray-3 flex-shrink-0" />
+                              )}
+                              <span style={{ fontSize: '12px' }} className={
+                                isDone    ? 'text-navy' :
+                                isActive  ? 'text-teal font-semibold' :
+                                isWaiting ? 'text-amber-700 font-semibold' :
+                                'text-gray-3'
+                              }>
+                                {task}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Result pills */}
+                      {status === 'completed' && stepDef.stepKey === 'scoring' && run.composite_score != null && (
+                        <div className="mt-3 flex items-center gap-2 flex-wrap p-3 bg-gray-1 rounded-lg">
+                          <BarChart2 size={12} className="text-gray-3" />
+                          <span className="text-gray-3" style={{ fontSize: '11px' }}>Result:</span>
+                          <span className="text-navy font-bold font-mono" style={{ fontSize: '14px' }}>{run.composite_score}</span>
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${run.risk_level === 'HIGH' ? 'bg-critical-light text-critical' : run.risk_level === 'MEDIUM' ? 'bg-high-light text-high' : 'bg-low-light text-low'}`}>{run.risk_level}</span>
+                          {run.intervention_type && <span className="px-2 py-0.5 rounded bg-teal-light text-teal text-xs font-medium capitalize">{run.intervention_type.replace(/_/g, ' ')}</span>}
+                        </div>
+                      )}
+                      {status === 'completed' && stepDef.stepKey === 'offer_personalisation' && run.offer && (
+                        <div className="mt-3 flex items-center gap-2 flex-wrap p-3 bg-gray-1 rounded-lg">
+                          <Gift size={12} className="text-teal" />
+                          <span className="text-gray-3" style={{ fontSize: '11px' }}>Selected:</span>
+                          <span className="text-navy font-semibold" style={{ fontSize: '13px' }}>{run.offer.offer_title}</span>
+                          <span className="font-mono text-xs bg-white px-2 py-0.5 rounded border border-gray-2">{run.offer.offer_code}</span>
+                          <span className="text-gray-3 text-xs">· expires {run.offer.expiry_days}d</span>
+                        </div>
+                      )}
+                      {stepDef.stepKey === 'human_approval' && run.approval_status && run.approval_status !== 'pending' && (
+                        <div className="mt-3 flex items-center gap-2 p-3 bg-gray-1 rounded-lg">
+                          <UserCheck size={12} className={run.approval_status === 'approved' ? 'text-low' : 'text-critical'} />
+                          <span className="text-gray-3" style={{ fontSize: '11px' }}>Decision:</span>
+                          <span className={`font-semibold text-xs ${run.approval_status === 'approved' ? 'text-low' : 'text-critical'}`}>
+                            {run.approval_status === 'approved'
+                              ? `Approved${run.approver ? ` by ${run.approver}` : ''}`
+                              : `Rejected${run.approval_reason ? ` — ${run.approval_reason}` : ''}`}
                           </span>
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Step result data (when completed) */}
-                  {status === 'completed' && stepDef.stepKey === 'scoring' && run.composite_score != null && (
-                    <div className="mt-3 flex items-center gap-3 p-3 bg-gray-1 rounded-lg">
-                      <BarChart2 size={13} className="text-high flex-shrink-0" />
-                      <span className="text-gray-3" style={{ fontSize: '11px' }}>Result:</span>
-                      <span className="text-navy font-bold font-mono" style={{ fontSize: '13px' }}>{run.composite_score}</span>
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                        run.risk_level === 'HIGH' ? 'bg-critical-light text-critical' :
-                        run.risk_level === 'MEDIUM' ? 'bg-high-light text-high' :
-                        'bg-low-light text-low'
-                      }`}>{run.risk_level}</span>
-                      {run.intervention_type && (
-                        <span className="px-2 py-0.5 rounded bg-teal-light text-teal text-xs font-medium capitalize">
-                          {run.intervention_type.replace(/_/g, ' ')}
-                        </span>
+                      )}
+                      {status === 'completed' && stepDef.stepKey === 'outreach_execution' && run.outreach_content && (
+                        <div className="mt-3 flex items-center gap-2 flex-wrap p-3 bg-gray-1 rounded-lg">
+                          <Send size={12} className="text-teal" />
+                          <span className="text-gray-3" style={{ fontSize: '11px' }}>Dispatched via:</span>
+                          <span className="text-navy font-semibold text-xs">{run.outreach_content.channels_used.join(', ').toUpperCase()}</span>
+                          <span className="text-gray-3 text-xs">· {run.outreach_content.send_timing}</span>
+                        </div>
                       )}
                     </div>
                   )}
-                  {status === 'completed' && stepDef.stepKey === 'offer_personalisation' && run.offer && (
-                    <div className="mt-3 flex items-center gap-3 p-3 bg-gray-1 rounded-lg flex-wrap">
-                      <Gift size={13} className="text-teal flex-shrink-0" />
-                      <span className="text-gray-3" style={{ fontSize: '11px' }}>Selected:</span>
-                      <span className="text-navy font-semibold" style={{ fontSize: '13px' }}>{run.offer.offer_title}</span>
-                      <span className="font-mono text-xs bg-white px-2 py-0.5 rounded border border-gray-2">{run.offer.offer_code}</span>
-                      <span className="text-gray-3 text-xs">Expires in {run.offer.expiry_days}d</span>
-                    </div>
-                  )}
-                  {stepDef.stepKey === 'human_approval' && run.approval_status && run.approval_status !== 'pending' && (
-                    <div className="mt-3 flex items-center gap-2 p-3 bg-gray-1 rounded-lg">
-                      <UserCheck size={13} className={`flex-shrink-0 ${run.approval_status === 'approved' ? 'text-low' : 'text-critical'}`} />
-                      <span className="text-gray-3" style={{ fontSize: '11px' }}>Decision:</span>
-                      <span className={`font-semibold text-xs ${run.approval_status === 'approved' ? 'text-low' : 'text-critical'}`}>
-                        {run.approval_status === 'approved'
-                          ? `Approved${run.approver ? ` by ${run.approver}` : ''}`
-                          : `Rejected${run.approval_reason ? ` — ${run.approval_reason}` : ''}`}
-                      </span>
-                    </div>
-                  )}
-                  {status === 'completed' && stepDef.stepKey === 'outreach_execution' && run.outreach_content && (
-                    <div className="mt-3 flex items-center gap-3 p-3 bg-gray-1 rounded-lg flex-wrap">
-                      <Send size={13} className="text-teal flex-shrink-0" />
-                      <span className="text-gray-3" style={{ fontSize: '11px' }}>Dispatched via:</span>
-                      <span className="text-navy font-semibold text-xs">{run.outreach_content.channels_used.join(', ').toUpperCase()}</span>
-                      <span className="text-gray-3 text-xs">· {run.outreach_content.send_timing}</span>
-                    </div>
-                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
