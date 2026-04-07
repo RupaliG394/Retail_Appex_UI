@@ -1,0 +1,156 @@
+:root {
+  /* Design Tokens - Color System */
+  --navy: #1B2A4A;
+  --navy-deep: #0F1B30;
+  --teal: #006D77;
+  --teal-light: #E8F4F5;
+  --teal-mid: #004D55;
+  
+  --critical: #C0392B;
+  --critical-light: #FADBD8;
+  --high: #D35400;
+  --high-light: #FDEBD0;
+  --medium: #D4AC0D;
+  --medium-light: #FEF9E7;
+  --low: #1A6B3C;
+  --low-light: #D5F0E0;
+  
+  --ai-purple: #7C3AED;
+  --ai-purple-light: #F3E8FF;
+  
+  --white: #FFFFFF;
+  --off-white: #F5F7FA;
+  --gray-1: #F0F2F5;
+  --gray-2: #D0D5DD;
+  --gray-3: #8896A7;
+  --black: #1A1A2E;
+  
+  --ga-orange: #E37400;
+  --salesforce: #00A1E0;
+  --shopify: #96BF48;
+  --yotpo: #FF4438;
+  --klaviyo: #F9E04B;
+  --zendesk: #03363D;
+  
+  /* Typography Scale */
+  --text-display: 48px;
+  --line-display: 56px;
+  --text-h1: 32px;
+  --line-h1: 40px;
+  --text-h2: 24px;
+  --line-h2: 32px;
+  --text-h3: 18px;
+  --line-h3: 26px;
+  --text-body-lg: 16px;
+  --line-body-lg: 24px;
+  --text-body: 14px;
+  --line-body: 22px;
+  --text-body-sm: 13px;
+  --line-body-sm: 20px;
+  --text-label: 12px;
+  --line-label: 16px;
+  --text-code: 13px;
+  --text-mono-sm: 11px;
+  
+  /* Spacing Scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  
+  /* Border Radius */
+  --radius-button: 8px;
+  --radius-card: 12px;
+  --radius-modal: 16px;
+  --radius-tag: 100px;
+  --radius-input: 8px;
+  
+  /* Shadows */
+  --shadow-l1: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-l2: 0 4px 16px rgba(0,0,0,0.12);
+  --shadow-l3: 0 20px 48px rgba(0,0,0,0.18);
+  
+  /* Layout */
+  --nav-height: 64px;
+  --sidebar-width: 240px;
+}
+
+@theme inline {
+  --color-navy: var(--navy);
+  --color-navy-deep: var(--navy-deep);
+  --color-teal: var(--teal);
+  --color-teal-light: var(--teal-light);
+  --color-teal-mid: var(--teal-mid);
+  
+  --color-critical: var(--critical);
+  --color-critical-light: var(--critical-light);
+  --color-high: var(--high);
+  --color-high-light: var(--high-light);
+  --color-medium: var(--medium);
+  --color-medium-light: var(--medium-light);
+  --color-low: var(--low);
+  --color-low-light: var(--low-light);
+  
+  --color-ai-purple: var(--ai-purple);
+  --color-ai-purple-light: var(--ai-purple-light);
+  
+  --color-white: var(--white);
+  --color-off-white: var(--off-white);
+  --color-gray-1: var(--gray-1);
+  --color-gray-2: var(--gray-2);
+  --color-gray-3: var(--gray-3);
+  --color-black: var(--black);
+  
+  --color-ga-orange: var(--ga-orange);
+  --color-salesforce: var(--salesforce);
+  --color-shopify: var(--shopify);
+  --color-yotpo: var(--yotpo);
+  --color-klaviyo: var(--klaviyo);
+  --color-zendesk: var(--zendesk);
+}
+
+@layer base {
+  * {
+    @apply border-gray-2;
+  }
+
+  body {
+    @apply bg-off-white text-black;
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    font-size: var(--text-body);
+    line-height: var(--line-body);
+  }
+
+  h1 {
+    font-size: var(--text-h1);
+    line-height: var(--line-h1);
+    font-weight: 600;
+  }
+
+  h2 {
+    font-size: var(--text-h2);
+    line-height: var(--line-h2);
+    font-weight: 600;
+  }
+
+  h3 {
+    font-size: var(--text-h3);
+    line-height: var(--line-h3);
+    font-weight: 500;
+  }
+
+  label {
+    font-size: var(--text-label);
+    line-height: var(--line-label);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+}
