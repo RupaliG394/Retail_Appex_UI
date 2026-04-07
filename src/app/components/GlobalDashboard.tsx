@@ -72,11 +72,9 @@ const offerPerformance = [
 ];
 
 const topAtRisk = [
-  { name: 'Sam Chen', id: 'SC-00291', score: 91, scoreType: 'CRITICAL', trigger: 'GA+Redemption' },
-  { name: 'Marcus Lee', id: 'ML-00445', score: 88, scoreType: 'CRITICAL', trigger: 'AOV+Support' },
-  { name: 'Janet Roy', id: 'JR-00812', score: 85, scoreType: 'HIGH', trigger: 'Zero Redemption' },
-  { name: 'Kevin Patel', id: 'KP-01203', score: 81, scoreType: 'HIGH', trigger: 'Session Collapse' },
-  { name: 'Amy Wong', id: 'AW-00654', score: 79, scoreType: 'HIGH', trigger: 'Discount Dep.' },
+  { name: 'David Chen', id: 'CUST_004', score: 97, scoreType: 'CRITICAL', trigger: 'GA+Redemption' },
+  { name: 'Sarah Mitchell', id: 'CUST_001', score: 88, scoreType: 'CRITICAL', trigger: 'AOV+Support' },
+  { name: 'James Thornton', id: 'CUST_002', score: 74, scoreType: 'HIGH', trigger: 'Session Collapse' },
 ];
 
 const activityFeed = [
