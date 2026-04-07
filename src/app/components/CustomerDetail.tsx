@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router";
+import { useParams, Link, useSearchParams } from "react-router";
 import {
   ChevronLeft,
   Mail,
@@ -20,7 +20,9 @@ import {
   MessageSquare,
   Bell,
   CheckCircle2,
-  Filter
+  Zap,
+  Gift,
+  RefreshCw,
 } from "lucide-react";
 import {
   LineChart,
@@ -34,8 +36,9 @@ import {
   Legend,
   ResponsiveContainer
 } from "recharts";
-import { WorkflowStatusModal } from "./WorkflowStatusModal";
+import { WorkflowStatusContent } from "./WorkflowStatusModal";
 import { useTriggerWorkflow } from "../hooks/useWorkflow";
+import { toast } from "sonner";
 
 // Mock customer data - in real app this would come from API
 const customerData = {
@@ -243,13 +246,65 @@ const badgeStyle = (variant: string) => {
   }
 };
 
+const suggestedOffers = [
+  {
+    icon: <Sparkles className="w-5 h-5 text-ai-purple" />,
+    bg: 'bg-ai-purple-light',
+    title: 'Personal Outreach',
+    description: 'Personalised email + SMS from a retention specialist. 91% success rate with this profile.',
+    tag: 'Recommended',
+    tagColor: 'bg-ai-purple-light text-ai-purple',
+  },
+  {
+    icon: <Gift className="w-5 h-5 text-teal" />,
+    bg: 'bg-teal-light',
+    title: 'First Redemption Bonus',
+    description: 'Unlock 500 bonus points on first loyalty redemption. Targets unused 3,450 pt balance.',
+    tag: 'Loyalty',
+    tagColor: 'bg-teal-light text-teal',
+  },
+  {
+    icon: <DollarSign className="w-5 h-5 text-high" />,
+    bg: 'bg-high-light',
+    title: 'Double Points Weekend',
+    description: '2× points on next purchase this weekend. Historically effective for session-collapse profiles.',
+    tag: 'Promotion',
+    tagColor: 'bg-high-light text-high',
+  },
+];
+
 export function CustomerDetail() {
   const { id } = useParams();
-  const customer = customerData; // In real app, fetch by ID
+  const [searchParams, setSearchParams] = useSearchParams();
+  const customer = customerData;
   const { trigger, isLoading: isTriggering } = useTriggerWorkflow();
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [logChannelFilter, setLogChannelFilter] = useState<string>('All');
   const [logTimeFilter, setLogTimeFilter] = useState<string>('Last 90 Days');
+
+  const activeTab = searchParams.get('tab') ?? 'summary';
+  const runParam = searchParams.get('run');
+
+  const setTab = (tab: string, run?: string) => {
+    const params: Record<string, string> = { tab };
+    if (run) params.run = run;
+    else if (runParam && tab === 'actions') params.run = runParam;
+    setSearchParams(params);
+  };
+
+  const handleTriggerBrief = async () => {
+    const backendId = id ?? customer.id;
+    const toastId = toast.loading(`Starting retention workflow for ${customer.name}…`);
+    const runId = await trigger(backendId);
+    if (runId) {
+      toast.success(`Workflow started for ${customer.name}`, {
+        id: toastId,
+        description: `Run ID: ${runId.slice(0, 8)}…`,
+      });
+      setSearchParams({ tab: 'actions', run: runId });
+    } else {
+      toast.error(`Failed to start workflow for ${customer.name}`, { id: toastId });
+    }
+  };
 
   const filteredActivityLog = customer.activityLog.filter(entry => {
     const channelMatch = logChannelFilter === 'All' || entry.channel === logChannelFilter;
@@ -263,11 +318,6 @@ export function CustomerDetail() {
       diffDays <= 90;
     return channelMatch && timeMatch;
   });
-
-  const handleTriggerBrief = async () => {
-    const runId = await trigger(customer.id);
-    if (runId) setActiveRunId(runId);
-  };
 
   return (
     <div className="space-y-6">
@@ -330,14 +380,42 @@ export function CustomerDetail() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4" />
-                  <span>Customer ID: {customer.id}</span>
+                  <span>Customer ID: {id ?? customer.id}</span>
                 </div>
+              </div>
+
+              {/* Take Action button — always in header */}
+              <div className="mt-4">
+                {runParam ? (
+                  <button
+                    onClick={() => setTab('actions')}
+                    className="px-4 py-2 bg-low text-white rounded-lg hover:bg-low/80 transition-colors flex items-center gap-2"
+                    style={{ fontSize: '13px', fontWeight: '500' }}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    View Active Workflow
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleTriggerBrief}
+                    disabled={isTriggering}
+                    className="px-4 py-2 bg-teal text-white rounded-lg hover:bg-teal-mid transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                    style={{ fontSize: '13px', fontWeight: '500' }}
+                  >
+                    {isTriggering ? (
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Zap className="w-4 h-4" />
+                    )}
+                    {isTriggering ? 'Starting workflow…' : 'Take Action'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
 
           {/* Risk Score */}
-          <div className="text-center px-6 py-4 bg-critical-light rounded-xl">
+          <div className="text-center px-6 py-4 bg-critical-light rounded-xl flex-shrink-0">
             <p className="text-gray-3 mb-2" style={{ fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Churn Risk Score
             </p>
@@ -359,335 +437,402 @@ export function CustomerDetail() {
         </div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-5 border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-3" style={{ fontSize: '13px', fontWeight: '500' }}>Lifetime Value</p>
-            <DollarSign className="w-5 h-5 text-teal" />
-          </div>
-          <p className="text-navy mb-1" style={{ fontSize: '28px', fontWeight: '600' }}>
-            ${customer.ltv.toLocaleString()}
-          </p>
-          <p className="text-gray-3" style={{ fontSize: '13px' }}>Top 15% of customers</p>
-        </div>
-        <div className="bg-white rounded-xl p-5 border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-3" style={{ fontSize: '13px', fontWeight: '500' }}>Total Orders</p>
-            <ShoppingCart className="w-5 h-5 text-teal" />
-          </div>
-          <p className="text-navy mb-1" style={{ fontSize: '28px', fontWeight: '600' }}>
-            {customer.totalOrders}
-          </p>
-          <p className="text-gray-3" style={{ fontSize: '13px' }}>Avg ${customer.avgOrderValue} per order</p>
-        </div>
-        <div className="bg-white rounded-xl p-5 border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-3" style={{ fontSize: '13px', fontWeight: '500' }}>Loyalty Points</p>
-            <Star className="w-5 h-5 text-ai-purple" />
-          </div>
-          <p className="text-navy mb-1" style={{ fontSize: '28px', fontWeight: '600' }}>
-            {customer.loyaltyPoints.toLocaleString()}
-          </p>
-          <p className="text-gray-3" style={{ fontSize: '13px' }}>{customer.redemptions} redemptions total</p>
-        </div>
-        <div className="bg-white rounded-xl p-5 border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-3" style={{ fontSize: '13px', fontWeight: '500' }}>Segment</p>
-            <Activity className="w-5 h-5 text-teal" />
-          </div>
-          <p className="text-navy mb-1" style={{ fontSize: '28px', fontWeight: '600' }}>
-            {customer.segment}
-          </p>
-          <p className="text-gray-3" style={{ fontSize: '13px' }}>Premium tier</p>
-        </div>
+      {/* Tab Navigation */}
+      <div className="flex gap-1 p-1 bg-white rounded-xl border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
+        <button
+          onClick={() => setTab('summary')}
+          className={`flex-1 py-2.5 rounded-lg transition-colors font-medium ${
+            activeTab === 'summary'
+              ? 'bg-navy text-white'
+              : 'text-gray-3 hover:text-navy hover:bg-gray-1'
+          }`}
+          style={{ fontSize: '14px' }}
+        >
+          Summary
+        </button>
+        <button
+          onClick={() => setTab('actions')}
+          className={`flex-1 py-2.5 rounded-lg transition-colors font-medium flex items-center justify-center gap-2 ${
+            activeTab === 'actions'
+              ? 'bg-navy text-white'
+              : 'text-gray-3 hover:text-navy hover:bg-gray-1'
+          }`}
+          style={{ fontSize: '14px' }}
+        >
+          Actions
+          {runParam && (
+            <span className={`w-2 h-2 rounded-full ${activeTab === 'actions' ? 'bg-low' : 'bg-teal'} animate-pulse`} />
+          )}
+        </button>
       </div>
 
-      {/* Churn Signals */}
-      <div className="bg-white rounded-xl border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
-        <div className="p-5 border-b border-gray-2">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-critical" />
-            <h3 className="text-navy">Active Churn Signals</h3>
-          </div>
-        </div>
-        <div className="divide-y divide-gray-2">
-          {customer.churnSignals.map((signal, idx) => (
-            <div key={idx} className="p-5 hover:bg-gray-1 transition-colors">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-navy">{signal.signal}</h3>
-                    <span className={`px-2 py-1 rounded ${getRiskColor(signal.severity)}`} style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '0.5px' }}>
-                      {signal.severity}
-                    </span>
-                  </div>
-                  <p className="text-gray-3 mb-2" style={{ fontSize: '14px' }}>
-                    {signal.detail}
-                  </p>
-                  <p className="text-gray-3" style={{ fontSize: '13px' }}>
-                    Detected {formatDate(signal.detected)}
-                  </p>
-                </div>
+      {/* ── SUMMARY TAB ───────────────────────────────────────────────────────── */}
+      {activeTab === 'summary' && (
+        <>
+          {/* Key Metrics */}
+          <div className="grid grid-cols-4 gap-4">
+            <div className="bg-white rounded-xl p-5 border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-gray-3" style={{ fontSize: '13px', fontWeight: '500' }}>Lifetime Value</p>
+                <DollarSign className="w-5 h-5 text-teal" />
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-2 gap-6">
-        {/* Purchase History */}
-        <div className="bg-white rounded-xl border border-gray-2 p-6" style={{ boxShadow: 'var(--shadow-l1)' }}>
-          <h3 className="text-navy mb-4">Purchase History</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={customer.purchaseHistory}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#D0D5DD" />
-              <XAxis
-                dataKey="month"
-                tick={{ fill: '#8896A7', fontSize: 12 }}
-                stroke="#D0D5DD"
-              />
-              <YAxis
-                tick={{ fill: '#8896A7', fontSize: 12 }}
-                stroke="#D0D5DD"
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #D0D5DD',
-                  borderRadius: '8px',
-                  fontSize: '13px'
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: '13px' }} />
-              <Bar dataKey="orders" fill="#006D77" name="Orders" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Engagement Trend */}
-        <div className="bg-white rounded-xl border border-gray-2 p-6" style={{ boxShadow: 'var(--shadow-l1)' }}>
-          <h3 className="text-navy mb-4">Engagement Trend</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={customer.engagementTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#D0D5DD" />
-              <XAxis
-                dataKey="month"
-                tick={{ fill: '#8896A7', fontSize: 12 }}
-                stroke="#D0D5DD"
-              />
-              <YAxis
-                tick={{ fill: '#8896A7', fontSize: 12 }}
-                stroke="#D0D5DD"
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #D0D5DD',
-                  borderRadius: '8px',
-                  fontSize: '13px'
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: '13px' }} />
-              <Line
-                type="monotone"
-                dataKey="sessions"
-                stroke="#006D77"
-                strokeWidth={2}
-                name="Sessions"
-              />
-              <Line
-                type="monotone"
-                dataKey="emails"
-                stroke="#7C3AED"
-                strokeWidth={2}
-                name="Emails Opened"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Intervention History */}
-      <div className="bg-white rounded-xl border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
-        <div className="p-5 border-b border-gray-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-navy">Intervention History</h3>
-            <button
-              onClick={handleTriggerBrief}
-              disabled={isTriggering}
-              className="px-4 py-2 bg-teal text-white rounded-lg hover:bg-teal-mid transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              style={{ fontSize: '13px', fontWeight: '500' }}
-            >
-              <Send className="w-4 h-4" />
-              {isTriggering ? 'Triggering…' : 'Send New Brief'}
-            </button>
-          </div>
-        </div>
-        <div className="divide-y divide-gray-2">
-          {customer.interventions.map((intervention, idx) => (
-            <div key={idx} className="p-5 hover:bg-gray-1 transition-colors">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-4 flex-1">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    intervention.type === 'Brief Sent' ? 'bg-teal-light' : 'bg-critical-light'
-                  }`}>
-                    {intervention.type === 'Brief Sent' ? (
-                      <Send className={`w-5 h-5 ${intervention.status === 'Delivered' ? 'text-teal' : 'text-gray-3'}`} />
-                    ) : (
-                      <AlertTriangle className="w-5 h-5 text-critical" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <p className="text-navy" style={{ fontSize: '15px', fontWeight: '500' }}>
-                        {intervention.type}
-                      </p>
-                      {intervention.offer && (
-                        <span className="px-2 py-1 bg-gray-1 text-gray-3 rounded" style={{ fontSize: '12px', fontWeight: '500' }}>
-                          {intervention.offer}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-gray-3 mb-2" style={{ fontSize: '14px' }}>
-                      {intervention.result}
-                    </p>
-                    <div className="flex items-center gap-3 text-gray-3" style={{ fontSize: '13px' }}>
-                      <span>{formatDateTime(intervention.date)}</span>
-                      <span>•</span>
-                      <span>{intervention.agent}</span>
-                    </div>
-                  </div>
-                </div>
-                <span className={`px-3 py-1 rounded-full ${
-                  intervention.status === 'Delivered' ? 'bg-low-light text-low' : 'bg-medium-light text-medium'
-                }`} style={{ fontSize: '12px', fontWeight: '600' }}>
-                  {intervention.status}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* AI Insights */}
-      <div className="bg-ai-purple-light border border-ai-purple rounded-xl p-5">
-        <div className="flex items-start gap-3">
-          <Sparkles className="w-5 h-5 text-ai-purple flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-navy mb-3" style={{ fontSize: '15px', fontWeight: '600' }}>
-              AI Insights &amp; Recommendations
-            </p>
-            <ul className="space-y-2 text-navy" style={{ fontSize: '14px' }}>
-              <li className="flex items-start gap-2">
-                <span className="text-ai-purple mt-1">•</span>
-                <span><strong>Immediate action recommended:</strong> This customer shows classic "session collapse" pattern with engagement dropping from 15 → 1 sessions. Personal outreach has 91% success rate with this profile.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-ai-purple mt-1">•</span>
-                <span><strong>Loyalty opportunity:</strong> Customer has 3,450 unused points but zero redemptions in 60 days. First Redemption Bonus offer historically works well.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-ai-purple mt-1">•</span>
-                <span><strong>High-value customer:</strong> $2,847 LTV puts them in top 15%. Prioritize retention - losing this customer would require 8-10 new customers to replace revenue.</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Activity Log */}
-      <div className="bg-white rounded-xl border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
-        <div className="p-5 border-b border-gray-2">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <h3 className="text-navy">Activity Log</h3>
-              <p className="text-gray-3 mt-1" style={{ fontSize: '13px' }}>
-                Complete timeline of interactions and events for {customer.name}
+              <p className="text-navy mb-1" style={{ fontSize: '28px', fontWeight: '600' }}>
+                ${customer.ltv.toLocaleString()}
               </p>
+              <p className="text-gray-3" style={{ fontSize: '13px' }}>Top 15% of customers</p>
             </div>
-            <div className="flex items-center gap-3">
-              <select
-                value={logChannelFilter}
-                onChange={e => setLogChannelFilter(e.target.value)}
-                className="border border-gray-2 rounded-lg px-3 py-2 text-navy bg-white cursor-pointer hover:border-teal transition-colors"
-                style={{ fontSize: '13px', fontWeight: '500', outline: 'none' }}
-              >
-                {['All', 'Emails', 'SMS', 'Push', 'System'].map(opt => (
-                  <option key={opt}>{opt}</option>
-                ))}
-              </select>
-              <select
-                value={logTimeFilter}
-                onChange={e => setLogTimeFilter(e.target.value)}
-                className="border border-gray-2 rounded-lg px-3 py-2 text-navy bg-white cursor-pointer hover:border-teal transition-colors"
-                style={{ fontSize: '13px', fontWeight: '500', outline: 'none' }}
-              >
-                {['Last 7 Days', 'Last 30 Days', 'Last 90 Days', 'All Time'].map(opt => (
-                  <option key={opt}>{opt}</option>
-                ))}
-              </select>
+            <div className="bg-white rounded-xl p-5 border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-gray-3" style={{ fontSize: '13px', fontWeight: '500' }}>Total Orders</p>
+                <ShoppingCart className="w-5 h-5 text-teal" />
+              </div>
+              <p className="text-navy mb-1" style={{ fontSize: '28px', fontWeight: '600' }}>
+                {customer.totalOrders}
+              </p>
+              <p className="text-gray-3" style={{ fontSize: '13px' }}>Avg ${customer.avgOrderValue} per order</p>
+            </div>
+            <div className="bg-white rounded-xl p-5 border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-gray-3" style={{ fontSize: '13px', fontWeight: '500' }}>Loyalty Points</p>
+                <Star className="w-5 h-5 text-ai-purple" />
+              </div>
+              <p className="text-navy mb-1" style={{ fontSize: '28px', fontWeight: '600' }}>
+                {customer.loyaltyPoints.toLocaleString()}
+              </p>
+              <p className="text-gray-3" style={{ fontSize: '13px' }}>{customer.redemptions} redemptions total</p>
+            </div>
+            <div className="bg-white rounded-xl p-5 border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-gray-3" style={{ fontSize: '13px', fontWeight: '500' }}>Segment</p>
+                <Activity className="w-5 h-5 text-teal" />
+              </div>
+              <p className="text-navy mb-1" style={{ fontSize: '28px', fontWeight: '600' }}>
+                {customer.segment}
+              </p>
+              <p className="text-gray-3" style={{ fontSize: '13px' }}>Premium tier</p>
             </div>
           </div>
-        </div>
 
-        {filteredActivityLog.length === 0 ? (
-          <div className="p-10 text-center text-gray-3" style={{ fontSize: '14px' }}>
-            No activity found for the selected filters.
-          </div>
-        ) : (
-          <div className="p-5">
-            <div className="relative">
-              {/* Vertical timeline line */}
-              <div
-                className="absolute left-5 top-5 bottom-5 w-px bg-gray-2"
-                style={{ marginLeft: '-0.5px' }}
-              />
-              <div className="space-y-6">
-                {filteredActivityLog.map((entry, idx) => (
-                  <div key={entry.id} className="flex items-start gap-4 relative">
-                    {/* Icon */}
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${activityIconBg(entry.type)}`}>
-                      {activityIcon(entry.type)}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0 pt-1">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-navy" style={{ fontSize: '15px', fontWeight: '600' }}>
-                              {entry.title}
-                            </p>
-                            <CheckCircle2 className="w-4 h-4 text-low flex-shrink-0" />
-                          </div>
-                          <p className="text-gray-3 mb-2" style={{ fontSize: '14px' }}>
-                            {entry.description}
-                          </p>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${badgeStyle(entry.badge.variant)}`}>
-                            {entry.badge.label}
-                          </span>
-                        </div>
-                        <span className="text-gray-3 flex-shrink-0 pt-0.5" style={{ fontSize: '13px' }}>
-                          {getRelativeTime(entry.date)}
+          {/* Churn Signals */}
+          <div className="bg-white rounded-xl border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
+            <div className="p-5 border-b border-gray-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-critical" />
+                <h3 className="text-navy">Active Churn Signals</h3>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-2">
+              {customer.churnSignals.map((signal, idx) => (
+                <div key={idx} className="p-5 hover:bg-gray-1 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-navy">{signal.signal}</h3>
+                        <span className={`px-2 py-1 rounded ${getRiskColor(signal.severity)}`} style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '0.5px' }}>
+                          {signal.severity}
                         </span>
                       </div>
+                      <p className="text-gray-3 mb-2" style={{ fontSize: '14px' }}>{signal.detail}</p>
+                      <p className="text-gray-3" style={{ fontSize: '13px' }}>Detected {formatDate(signal.detected)}</p>
                     </div>
                   </div>
-                ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Charts Row */}
+          <div className="grid grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl border border-gray-2 p-6" style={{ boxShadow: 'var(--shadow-l1)' }}>
+              <h3 className="text-navy mb-4">Purchase History</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={customer.purchaseHistory}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#D0D5DD" />
+                  <XAxis dataKey="month" tick={{ fill: '#8896A7', fontSize: 12 }} stroke="#D0D5DD" />
+                  <YAxis tick={{ fill: '#8896A7', fontSize: 12 }} stroke="#D0D5DD" />
+                  <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #D0D5DD', borderRadius: '8px', fontSize: '13px' }} />
+                  <Legend wrapperStyle={{ fontSize: '13px' }} />
+                  <Bar dataKey="orders" fill="#006D77" name="Orders" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-2 p-6" style={{ boxShadow: 'var(--shadow-l1)' }}>
+              <h3 className="text-navy mb-4">Engagement Trend</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={customer.engagementTrend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#D0D5DD" />
+                  <XAxis dataKey="month" tick={{ fill: '#8896A7', fontSize: 12 }} stroke="#D0D5DD" />
+                  <YAxis tick={{ fill: '#8896A7', fontSize: 12 }} stroke="#D0D5DD" />
+                  <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #D0D5DD', borderRadius: '8px', fontSize: '13px' }} />
+                  <Legend wrapperStyle={{ fontSize: '13px' }} />
+                  <Line type="monotone" dataKey="sessions" stroke="#006D77" strokeWidth={2} name="Sessions" />
+                  <Line type="monotone" dataKey="emails" stroke="#7C3AED" strokeWidth={2} name="Emails Opened" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Intervention History */}
+          <div className="bg-white rounded-xl border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
+            <div className="p-5 border-b border-gray-2">
+              <h3 className="text-navy">Intervention History</h3>
+            </div>
+            <div className="divide-y divide-gray-2">
+              {customer.interventions.map((intervention, idx) => (
+                <div key={idx} className="p-5 hover:bg-gray-1 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-4 flex-1">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        intervention.type === 'Brief Sent' ? 'bg-teal-light' : 'bg-critical-light'
+                      }`}>
+                        {intervention.type === 'Brief Sent' ? (
+                          <Send className={`w-5 h-5 ${intervention.status === 'Delivered' ? 'text-teal' : 'text-gray-3'}`} />
+                        ) : (
+                          <AlertTriangle className="w-5 h-5 text-critical" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <p className="text-navy" style={{ fontSize: '15px', fontWeight: '500' }}>{intervention.type}</p>
+                          {intervention.offer && (
+                            <span className="px-2 py-1 bg-gray-1 text-gray-3 rounded" style={{ fontSize: '12px', fontWeight: '500' }}>
+                              {intervention.offer}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-gray-3 mb-2" style={{ fontSize: '14px' }}>{intervention.result}</p>
+                        <div className="flex items-center gap-3 text-gray-3" style={{ fontSize: '13px' }}>
+                          <span>{formatDateTime(intervention.date)}</span>
+                          <span>•</span>
+                          <span>{intervention.agent}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full ${
+                      intervention.status === 'Delivered' ? 'bg-low-light text-low' : 'bg-medium-light text-medium'
+                    }`} style={{ fontSize: '12px', fontWeight: '600' }}>
+                      {intervention.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* AI Insights */}
+          <div className="bg-ai-purple-light border border-ai-purple rounded-xl p-5">
+            <div className="flex items-start gap-3">
+              <Sparkles className="w-5 h-5 text-ai-purple flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-navy mb-3" style={{ fontSize: '15px', fontWeight: '600' }}>
+                  AI Insights &amp; Recommendations
+                </p>
+                <ul className="space-y-2 text-navy" style={{ fontSize: '14px' }}>
+                  <li className="flex items-start gap-2">
+                    <span className="text-ai-purple mt-1">•</span>
+                    <span><strong>Immediate action recommended:</strong> This customer shows classic "session collapse" pattern with engagement dropping from 15 → 1 sessions. Personal outreach has 91% success rate with this profile.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-ai-purple mt-1">•</span>
+                    <span><strong>Loyalty opportunity:</strong> Customer has 3,450 unused points but zero redemptions in 60 days. First Redemption Bonus offer historically works well.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-ai-purple mt-1">•</span>
+                    <span><strong>High-value customer:</strong> $2,847 LTV puts them in top 15%. Prioritize retention — losing this customer would require 8-10 new customers to replace revenue.</span>
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
-        )}
-      </div>
 
-      {activeRunId && (
-        <WorkflowStatusModal
-          runId={activeRunId}
-          customerName={customer.name}
-          onClose={() => setActiveRunId(null)}
-        />
+          {/* Activity Log */}
+          <div className="bg-white rounded-xl border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
+            <div className="p-5 border-b border-gray-2">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="text-navy">Activity Log</h3>
+                  <p className="text-gray-3 mt-1" style={{ fontSize: '13px' }}>
+                    Complete timeline of interactions and events for {customer.name}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={logChannelFilter}
+                    onChange={e => setLogChannelFilter(e.target.value)}
+                    className="border border-gray-2 rounded-lg px-3 py-2 text-navy bg-white cursor-pointer hover:border-teal transition-colors"
+                    style={{ fontSize: '13px', fontWeight: '500', outline: 'none' }}
+                  >
+                    {['All', 'Emails', 'SMS', 'Push', 'System'].map(opt => (
+                      <option key={opt}>{opt}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={logTimeFilter}
+                    onChange={e => setLogTimeFilter(e.target.value)}
+                    className="border border-gray-2 rounded-lg px-3 py-2 text-navy bg-white cursor-pointer hover:border-teal transition-colors"
+                    style={{ fontSize: '13px', fontWeight: '500', outline: 'none' }}
+                  >
+                    {['Last 7 Days', 'Last 30 Days', 'Last 90 Days', 'All Time'].map(opt => (
+                      <option key={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {filteredActivityLog.length === 0 ? (
+              <div className="p-10 text-center text-gray-3" style={{ fontSize: '14px' }}>
+                No activity found for the selected filters.
+              </div>
+            ) : (
+              <div className="p-5">
+                <div className="relative">
+                  <div className="absolute left-5 top-5 bottom-5 w-px bg-gray-2" style={{ marginLeft: '-0.5px' }} />
+                  <div className="space-y-6">
+                    {filteredActivityLog.map((entry) => (
+                      <div key={entry.id} className="flex items-start gap-4 relative">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${activityIconBg(entry.type)}`}>
+                          {activityIcon(entry.type)}
+                        </div>
+                        <div className="flex-1 min-w-0 pt-1">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-navy" style={{ fontSize: '15px', fontWeight: '600' }}>{entry.title}</p>
+                                <CheckCircle2 className="w-4 h-4 text-low flex-shrink-0" />
+                              </div>
+                              <p className="text-gray-3 mb-2" style={{ fontSize: '14px' }}>{entry.description}</p>
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${badgeStyle(entry.badge.variant)}`}>
+                                {entry.badge.label}
+                              </span>
+                            </div>
+                            <span className="text-gray-3 flex-shrink-0 pt-0.5" style={{ fontSize: '13px' }}>
+                              {getRelativeTime(entry.date)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── ACTIONS TAB ───────────────────────────────────────────────────────── */}
+      {activeTab === 'actions' && (
+        <div className="space-y-6">
+          {runParam ? (
+            /* ── Workflow in progress / completed ── */
+            <div className="bg-white rounded-xl border border-gray-2 p-6" style={{ boxShadow: 'var(--shadow-l1)' }}>
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="text-navy">Retention Workflow</h3>
+                  <p className="text-gray-3 mt-0.5" style={{ fontSize: '13px' }}>
+                    {customer.name} — started via AI retention orchestrator
+                  </p>
+                </div>
+                <button
+                  onClick={handleTriggerBrief}
+                  disabled={isTriggering}
+                  className="px-3 py-1.5 bg-white border border-gray-2 text-navy rounded-lg hover:bg-gray-1 transition-colors flex items-center gap-2 disabled:opacity-60"
+                  style={{ fontSize: '12px', fontWeight: '500' }}
+                >
+                  {isTriggering ? (
+                    <span className="w-3.5 h-3.5 border-2 border-navy border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  )}
+                  Start New Action
+                </button>
+              </div>
+              <WorkflowStatusContent runId={runParam} />
+            </div>
+          ) : (
+            /* ── No action taken yet ── */
+            <>
+              {/* Prompt card */}
+              <div className="bg-white rounded-xl border border-gray-2 p-6" style={{ boxShadow: 'var(--shadow-l1)' }}>
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-critical-light flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="w-6 h-6 text-critical" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-navy mb-1">No action has been taken yet</h3>
+                    <p className="text-gray-3 mb-4" style={{ fontSize: '14px' }}>
+                      {customer.name} is at <strong className="text-critical">CRITICAL</strong> risk (score {customer.currentRiskScore}).
+                      Starting a retention workflow will analyse churn signals, select the optimal offer, and prepare a personalised campaign for your review.
+                    </p>
+                    <button
+                      onClick={handleTriggerBrief}
+                      disabled={isTriggering}
+                      className="px-5 py-2.5 bg-teal text-white rounded-lg hover:bg-teal-mid transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                      style={{ fontSize: '14px', fontWeight: '600' }}
+                    >
+                      {isTriggering ? (
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Zap className="w-4 h-4" />
+                      )}
+                      {isTriggering ? 'Starting workflow…' : 'Take Action'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Recommendation */}
+              <div className="bg-ai-purple-light border border-ai-purple/20 rounded-xl p-5">
+                <div className="flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-ai-purple flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-navy mb-2" style={{ fontSize: '14px', fontWeight: '600' }}>AI Recommendation</p>
+                    <p className="text-navy" style={{ fontSize: '13px' }}>
+                      Based on session-collapse pattern and 3,450 unused loyalty points, <strong>Personal Outreach</strong> is recommended.
+                      Historical success rate with this profile: <strong className="text-teal">91%</strong>.
+                      Acting within the next 24h increases retention probability by 34%.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Suggested Actions */}
+              <div className="bg-white rounded-xl border border-gray-2" style={{ boxShadow: 'var(--shadow-l1)' }}>
+                <div className="p-5 border-b border-gray-2">
+                  <h3 className="text-navy">Available Actions</h3>
+                  <p className="text-gray-3 mt-0.5" style={{ fontSize: '13px' }}>
+                    The orchestrator will automatically select the best option based on real-time scoring.
+                  </p>
+                </div>
+                <div className="divide-y divide-gray-2">
+                  {suggestedOffers.map((offer, i) => (
+                    <div key={i} className="p-5 flex items-start gap-4 hover:bg-gray-1 transition-colors">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${offer.bg}`}>
+                        {offer.icon}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-navy font-medium" style={{ fontSize: '14px' }}>{offer.title}</p>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${offer.tagColor}`}>
+                            {offer.tag}
+                          </span>
+                        </div>
+                        <p className="text-gray-3" style={{ fontSize: '13px' }}>{offer.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-5 border-t border-gray-2 bg-gray-1 rounded-b-xl">
+                  <div className="flex items-center gap-2 text-gray-3" style={{ fontSize: '12px' }}>
+                    <FileText className="w-4 h-4" />
+                    The AI orchestrator scores and selects from all available offers. Click <strong className="text-navy">Take Action</strong> to start.
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

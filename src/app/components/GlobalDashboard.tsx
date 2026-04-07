@@ -10,10 +10,9 @@ import {
   Shield,
   FileText
 } from "lucide-react";
-import { Link, useOutletContext } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { api, DashboardStats } from "../services/api";
-import type { DrawerContext } from "./Layout";
 import { 
   LineChart, 
   Line, 
@@ -87,7 +86,7 @@ const activityFeed = [
 ];
 
 export function GlobalDashboard() {
-  const { openDrawer } = useOutletContext<DrawerContext>();
+  const navigate = useNavigate();
   const [dashStats, setDashStats] = useState<DashboardStats | null>(null);
   const [triggeringIds, setTriggeringIds] = useState<Set<string>>(new Set());
   const [triggeredMap, setTriggeredMap] = useState<Map<string, string>>(new Map());
@@ -103,11 +102,11 @@ export function GlobalDashboard() {
         source: 'ui_manual_trigger',
       });
       setTriggeredMap(prev => new Map(prev).set(customerId, res.run_id));
-      openDrawer(res.run_id, customerName);
       toast.success(`Workflow started for ${customerName}`, {
         id: toastId,
         description: `Run ID: ${res.run_id.slice(0, 8)}…`,
       });
+      navigate(`/customers/${customerId}?tab=actions&run=${res.run_id}`);
     } catch {
       toast.error(`Failed to start workflow for ${customerName}`, { id: toastId });
     } finally {
@@ -115,9 +114,9 @@ export function GlobalDashboard() {
     }
   };
 
-  const handleViewActivity = (customerId: string, customerName: string) => {
+  const handleViewActivity = (customerId: string) => {
     const runId = triggeredMap.get(customerId);
-    if (runId) openDrawer(runId, customerName);
+    if (runId) navigate(`/customers/${customerId}?tab=actions&run=${runId}`);
   };
 
   useEffect(() => {
@@ -460,7 +459,7 @@ export function GlobalDashboard() {
                 </div>
                 {triggeredMap.has(customer.id) ? (
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleViewActivity(customer.id, customer.name); }}
+                    onClick={(e) => { e.stopPropagation(); handleViewActivity(customer.id); }}
                     className="px-3 py-1.5 bg-low text-white rounded-lg hover:bg-low/80 transition-colors flex items-center gap-1.5 flex-shrink-0"
                     style={{ fontSize: '12px', fontWeight: '500' }}
                   >

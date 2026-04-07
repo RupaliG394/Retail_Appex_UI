@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { Link, useOutletContext } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Search, ChevronDown, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { api, MockCustomer } from "../services/api";
-import type { DrawerContext } from "./Layout";
 
 function mapCustomer(c: MockCustomer) {
   const isHighRisk = c.session_collapse_detected;
@@ -34,7 +33,7 @@ function mapCustomer(c: MockCustomer) {
 }
 
 export function CustomerList() {
-  const { openDrawer } = useOutletContext<DrawerContext>();
+  const navigate = useNavigate();
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [activeFilters, setActiveFilters] = useState<string[]>(['CRITICAL']);
   const [apiCustomers, setApiCustomers] = useState<MockCustomer[]>([]);
@@ -84,11 +83,11 @@ export function CustomerList() {
         source: 'ui_manual_trigger',
       });
       setTriggeredMap(prev => new Map(prev).set(customerId, res.run_id));
-      openDrawer(res.run_id, customerName);
       toast.success(`Workflow started for ${customerName}`, {
         id: toastId,
         description: `Run ID: ${res.run_id.slice(0, 8)}…`,
       });
+      navigate(`/customers/${customerId}?tab=actions&run=${res.run_id}`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to trigger workflow';
       toast.error(`Failed to start workflow for ${customerName}`, {
@@ -338,7 +337,7 @@ export function CustomerList() {
                   hasActiveBrief={triggeredMap.has(customer.id)}
                   onViewBrief={() => {
                     const runId = triggeredMap.get(customer.id);
-                    if (runId) openDrawer(runId, customer.name);
+                    if (runId) navigate(`/customers/${customer.id}?tab=actions&run=${runId}`);
                   }}
                   isLow={customer.scoreType === 'LOW'}
                 />

@@ -410,3 +410,89 @@ export function WorkflowStatusPanel({ runId, customerName, onClose }: Props) {
 
 // Keep old name as alias for any other imports
 export { WorkflowStatusPanel as WorkflowStatusModal };
+
+// ── Inline content (no panel chrome) — used by CustomerDetail Actions tab ────
+
+export function WorkflowStatusContent({ runId }: { runId: string }) {
+  const run = useWorkflowStatus(runId);
+  const { submit: submitApproval, isSubmitting } = useApproval();
+
+  const handleApprove = async (approved: boolean, reason: string) => {
+    await submitApproval(runId, { approved, reason, approver: 'retention_manager' });
+  };
+
+  if (!run) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="flex items-center gap-3 text-gray-3">
+          <span className="w-5 h-5 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+          Starting workflow…
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <StatusBadge status={run.workflow_status} />
+        {run.completed_at && run.started_at && (() => {
+          const ms = new Date(run.completed_at).getTime() - new Date(run.started_at).getTime();
+          const secs = Math.round(ms / 1000);
+          const label = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
+          return (
+            <span className="text-xs font-bold text-teal bg-teal-light px-2 py-1 rounded-full flex items-center gap-1">
+              <Clock size={11} />
+              Completed in {label}
+            </span>
+          );
+        })()}
+        <span className="text-gray-3 text-xs">Run {runId.slice(0, 8)}…</span>
+      </div>
+      <StepIndicator run={run} />
+      <ScoreDisplay run={run} />
+      <ConflictsDisplay conflicts={run.signal_conflicts ?? []} />
+      <OfferDisplay run={run} />
+      <OutreachDisplay run={run} />
+      {run.awaiting_human && !isSubmitting && (
+        <ApprovalForm run={run} onApprove={handleApprove} />
+      )}
+      {isSubmitting && (
+        <div className="mb-4 p-4 bg-teal-light text-teal rounded-lg text-sm flex items-center gap-2">
+          <span className="w-4 h-4 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+          Submitting decision…
+        </div>
+      )}
+      {(run.audit_trail ?? []).length > 0 && (
+        <div className="mt-2">
+          <div className="text-xs text-gray-3 font-semibold uppercase tracking-wider mb-3">Audit Trail</div>
+          <div className="relative">
+            <div className="absolute left-4 top-4 bottom-2 w-px bg-gray-2" />
+            <div className="space-y-4 pr-1">
+              {(run.audit_trail ?? []).map((entry, i) => {
+                const meta = humaniseAudit(entry.agent, entry.action);
+                return (
+                  <div key={i} className="flex items-start gap-3 relative">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${meta.color}`}>
+                      {meta.icon}
+                    </div>
+                    <div className="flex-1 pt-0.5 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <span className="text-navy font-semibold" style={{ fontSize: '13px' }}>{meta.label}</span>
+                        <span className="text-gray-3 flex-shrink-0" style={{ fontSize: '11px' }}>
+                          {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-gray-3 leading-relaxed" style={{ fontSize: '12px' }}>{meta.detail}</p>
+                      <span className="text-gray-3 mt-1 inline-block" style={{ fontSize: '11px', fontStyle: 'italic' }}>{entry.agent}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
